@@ -24,9 +24,14 @@ STATUS
        but NO DNS record - the CLOUDFLARE_API_TOKEN cannot edit DNS (code 10000).
        Fix: Cloudflare dashboard -> Workers & Pages -> gershon-publish -> Custom domains
        -> Activate (creates the CNAME), or give the token Zone:DNS:Edit.
+       2026-10-26 task #30b: still ❌ - Cloudflare dashboard signed out in both Chromes (host NXDOMAIN).
 [TODO] ❌ LINKEDIN_CLIENT_SECRET not in GitHub secrets yet
        (PUBLISH_LINKEDIN_CLIENT_SECRET in social repo) -> sign-in cannot finish.
-[TODO] ✅ LinkedIn app Publish: openid/profile/email OK (consent screen reached, redirect_uri accepted).
+       2026-10-26 task #30b: still ❌ - GitHub signed out in both Chromes; the cloud proxy blocks
+       the Actions secrets API. Alternative: set LINKEDIN_CLIENT_SECRET directly on the Pages
+       project (deploy-siblings.yml skips it when the GitHub secret is empty, so no overwrite).
+[DONE] ✅ LinkedIn app Publish: openid/profile/email OK (consent screen reached, redirect_uri accepted).
+       2026-10-26 task #30b: re-confirmed in the LinkedIn developer portal.
 [DONE] ✅ DB backup 2026-10-26 15:01 UTC: 9,299 rows / 18 tables (run 40345226157);
        DB backup before split: social repo branch backup/social-db,
        workflow backup-db.yml (encrypted pg_dump -> R2 gershon-backups + artifact)

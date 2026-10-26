@@ -11,6 +11,9 @@ SPEC: docs/THREE-PLATFORM-SPLIT.md (sections 2, 14-17 for this product).
 SIBLINGS: social.gershon.ai (repo social), Social Tracking (socialtracking.gershon.ai).
 
 STATUS
+[DONE] ✅ LIVE 2026-10-26: https://publish.gershon.ai v0.2.0 - ping, / -> /login, /api/clients 401,
+       LinkedIn accepts the sign-in request (client 86ju2np6725xfp).
+[TODO] ❌ full sign-in + menu check by Olivier (LinkedIn asked for his password).
 [DONE] v0.1.0 phase 1: split UI/API, internal-only gate, own domain.
 [DONE] v0.2.0 scope rule (Olivier 2026-10-26): Publish + Social Tracking serve
        CAMPAIGN and INTERNAL companies only; Social covers the whole ecosystem
@@ -20,12 +23,14 @@ STATUS
        ✅ /api/ping version 0.2.0 | ✅ / -> /login | ✅ GET /api/clients = 401
        ✅ Sign-in builds correct client_id + redirect_uri
        Deploy = social repo branch deploy/publish (workflow deploy-siblings.yml).
-[TODO] ❌ custom domain publish.gershon.ai: attached to the Pages project (status pending)
+[DONE] ✅ custom domain publish.gershon.ai LIVE 2026-10-26 - CNAME -> gershon-publish.pages.dev (proxied)
+       added from the Cloudflare dashboard. History: attached to the Pages project (status pending)
        but NO DNS record - the CLOUDFLARE_API_TOKEN cannot edit DNS (code 10000).
        Fix: Cloudflare dashboard -> Workers & Pages -> gershon-publish -> Custom domains
        -> Activate (creates the CNAME), or give the token Zone:DNS:Edit.
        2026-10-26 task #30b: still ❌ - Cloudflare dashboard signed out in both Chromes (host NXDOMAIN).
-[TODO] ❌ LINKEDIN_CLIENT_SECRET not in GitHub secrets yet
+[DONE] ✅ LINKEDIN_CLIENT_SECRET set directly on the Pages project 2026-10-26; the GitHub
+       secret is still empty, which the workflow skips (no overwrite). History: not in GitHub secrets
        (PUBLISH_LINKEDIN_CLIENT_SECRET in social repo) -> sign-in cannot finish.
        2026-10-26 task #30b: still ❌ - GitHub signed out in both Chromes; the cloud proxy blocks
        the Actions secrets API. Alternative: set LINKEDIN_CLIENT_SECRET directly on the Pages

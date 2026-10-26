@@ -47,7 +47,7 @@ function Avatar({ c }: { c: MenuClient }) {
 }
 
 /** Pages that follow the selected client. Anywhere else, picking a client opens Content & review. */
-const CLIENT_PAGES = ["/publishing", "/publishing/calendar", "/publishing/accounts", "/knowledge-base"];
+const CLIENT_PAGES = ["/dashboard", "/summary", "/publishing", "/publishing/calendar", "/publishing/accounts", "/knowledge-base"];
 
 export function ClientList() {
   const { clientId, setClientId, clients, error, reload } = useSelectedClient();

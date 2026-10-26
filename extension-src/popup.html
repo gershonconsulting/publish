@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Publish by Gershon.AI</title>
+  <style>
+    body { width: 320px; font: 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; color: #1f2937; }
+    .header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+    h1 { font-size: 14px; margin: 0; font-weight: 600; color: #D92D20; }
+    .ver { font-size: 10px; color: #9ca3af; }
+    .sub { font-size: 11px; color: #6b7280; margin-bottom: 12px; line-height: 1.4; }
+    .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 11px; margin: 4px 0 8px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; background: #D92D20; color: white; }
+    .btn:hover { background: #B42318; }
+    .btn:disabled { opacity: 0.6; cursor: wait; }
+    .row { display: flex; justify-content: space-between; font-size: 12px; padding: 5px 0; border-bottom: 1px solid #f3f4f6; }
+    .ok { color: #047857; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+    .muted { color: #9ca3af; }
+    .status { font-size: 11px; padding: 8px 10px; border-radius: 6px; margin: 4px 0; line-height: 1.4; background: #f3f4f6; color: #374151; }
+    .update-banner { background: #fee2e2; color: #991b1b; padding: 8px 10px; border-radius: 6px; font-size: 11px; margin: 8px 0; line-height: 1.4; }
+    .footer { margin-top: 10px; font-size: 11px; color: #9ca3af; }
+    .footer a { color: #6b7280; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Publish <span style="font-size:10px;color:#9ca3af;font-weight:600;letter-spacing:.08em;text-transform:uppercase;">by Gershon.AI</span></h1>
+    <span class="ver" id="ver"></span>
+  </div>
+  <div class="sub">Publishes the approved, scheduled posts of publish.gershon.ai on LinkedIn and X from this browser, in its own minimized window. Collects nothing.</div>
+
+  <div id="update-banner"></div>
+
+  <div id="sessions"></div>
+
+  <button id="tick" class="btn">Publish due posts now</button>
+  <div id="status"></div>
+
+  <div class="footer">
+    <a href="https://publish.gershon.ai/extension" target="_blank">Open publish.gershon.ai →</a>
+  </div>
+
+  <!-- gx-token.js wraps fetch, so it must run before anything that fetches. -->
+  <script src="gx-token.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

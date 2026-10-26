@@ -17,6 +17,7 @@ import { useSelectedClient } from "@/lib/selected-client";
 import { Check, ChevronDown, ChevronRight, Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { NetChip } from "@/components/publishing/shared";
 import { LinkedAccountsCard } from "@/components/settings/linked-accounts-card";
+import { EXTENSION_LATEST, PUBLISH_BROWSER_ID_PREFIX } from "@/lib/extension-version";
 
 type Conn = { platform: "LINKEDIN" | "TWITTER"; target: string; level: "ok" | "checking" | "missing" | "offline"; browsers: string[]; message: string };
 type BrowserRow = {
@@ -88,7 +89,7 @@ export function PublishingAccountsClient() {
       <Header
         title="Connections"
         eyebrow="Publishing"
-        subtitle="Can each company's posts go out on LinkedIn and X right now — and if not, exactly what to fix. Posts are published by the Chrome that is signed in to that account, through the Social extension."
+        subtitle="Can each company's posts go out on LinkedIn and X right now — and if not, exactly what to fix. Posts are published by the Chrome that is signed in to that account, through the Publish extension (Social's extension still publishes too during the transition)."
         actions={
           <button onClick={() => void load()} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
             <RefreshCw size={14} /> Refresh
@@ -136,7 +137,7 @@ function PublishingChromes({ browsers }: { browsers: BrowserRow[] }) {
         <div className="text-xs text-gray-500">{online.length} online · each one posts only for the accounts it is signed in to</div>
       </div>
       {browsers.length === 0 ? (
-        <p className="text-sm text-gray-600">No Chrome has introduced itself yet. A Chrome with the Social extension {LATEST_EXT} or later appears here within 5 minutes of being opened.</p>
+        <p className="text-sm text-gray-600">No Chrome has introduced itself yet. A Chrome with the Publish extension (v{EXTENSION_LATEST}) — or Social's, {LATEST_EXT} or later — appears here within 5 minutes of being opened.</p>
       ) : (
         <div className="divide-y divide-gray-100">
           {browsers.map((b) => (
@@ -144,7 +145,7 @@ function PublishingChromes({ browsers }: { browsers: BrowserRow[] }) {
               <div className="flex items-center gap-2 min-w-[220px]">
                 <span className={`w-2 h-2 rounded-full ${b.online ? "bg-emerald-500" : "bg-gray-300"}`} />
                 <span className="font-medium text-gray-900">{b.label}</span>
-                <span className={`text-[11px] ${older(b.version, LATEST_EXT) ? "text-red-600 font-medium" : "text-gray-400"}`}>v{b.version || "?"}</span>
+                <span className={`text-[11px] ${older(b.version, b.id.startsWith(PUBLISH_BROWSER_ID_PREFIX) ? EXTENSION_LATEST : LATEST_EXT) ? "text-red-600 font-medium" : "text-gray-400"}`}>v{b.version || "?"}</span>
               </div>
               <div className="flex items-center gap-1.5 text-gray-700"><NetChip n="TWITTER" /> {b.xSignedIn ? (b.x.length ? b.x.map((h) => "@" + h).join(", ") : "signed in") : <span className="text-red-700">signed out</span>}</div>
               <div className="flex items-center gap-1.5 text-gray-700"><NetChip n="LINKEDIN" /> {b.linkedinSignedIn ? `${b.linkedinName || "signed in"}${b.linkedinPages.length ? ` · can post on ${b.linkedinPages.length} page${b.linkedinPages.length === 1 ? "" : "s"}` : ""}` : <span className="text-red-700">signed out</span>}</div>

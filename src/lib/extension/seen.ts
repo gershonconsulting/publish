@@ -1,29 +1,28 @@
 /**
- * Extension presence heartbeat — storage + comparison helpers.
+ * Publish extension presence heartbeat — storage + comparison helpers.
+ * (Publish v0.6.0: own key, PUBLISH_PING/PUBLISH_PONG bridge.)
  *
  * Lives in lib/ (not in the route) because Next.js route modules may only
  * export HTTP verbs, and both /api/extension/seen and the daily progress
  * report need these.
  *
- * The GershonAI Chrome extension already announces itself to every
- * social.gershon.ai page (content.js posts GERSHONAI_HELLO and answers
- * GERSHONAI_PING with chrome.runtime.getManifest().version). Until now the
- * server never learned about it, so nothing outside the browser could tell
- * whether a stale build was still installed. ExtensionSeenReporter (mounted
- * in the dashboard layout) forwards that version to /api/extension/seen,
- * which records it here — in the settings table, so no schema change:
+ * The Publish extension announces itself on every publish.gershon.ai page
+ * (content.js posts PUBLISH_HELLO and answers PUBLISH_PING with PUBLISH_PONG,
+ * both carrying chrome.runtime.getManifest().version). The banner in the
+ * shared layout (components/layout/publish-extension-banner.tsx) forwards
+ * that version to /api/extension/seen, which records it here — in the
+ * settings table, so no schema change:
  *
- *   settings["ext_installed"] = {
- *     version:     "0.10.7",      // last version that reported in
- *     lastSeenAt:  ISO,           // last time any page saw the extension
- *     firstSeenAt: ISO,           // first sighting of THIS version
- *     previous:    "0.10.6"|null  // version it upgraded from
- *   }
+ *   settings["publish_ext_installed"] = { version, lastSeenAt, firstSeenAt, previous }
  */
 
 import prisma from "@/lib/db";
 
-export const EXT_SEEN_KEY = "ext_installed";
+/**
+ * Publish's own key (v0.6.0). Social keeps "ext_installed" for ITS extension;
+ * the two must never overwrite each other in the shared settings table.
+ */
+export const EXT_SEEN_KEY = "publish_ext_installed";
 
 export interface ExtSeen {
   version: string;

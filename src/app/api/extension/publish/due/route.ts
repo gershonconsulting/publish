@@ -9,9 +9,14 @@ export const runtime = "edge";
  * One delivery per call, CLAIMED atomically (SCHEDULED → POSTING), so nothing
  * is published twice even with two browsers. The extension loops until it
  * gets null, so LinkedIn and X go out back to back.
+ *
+ * v0.6.0: the workspace token must belong to the Gershon (primary) workspace —
+ * Publish is internal (lib/publish-extension-caller.ts). Claim semantics are
+ * unchanged. Called by Publish's own extension (publish-extension-v0.1.0).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { deliveryScope, resolvePublishCaller } from "@/lib/publish-caller";
+import { deliveryScope } from "@/lib/publish-caller";
+import { refusedStatus, resolvePublishExtensionCaller } from "@/lib/publish-extension-caller";
 import prisma from "@/lib/db-raw";
 import { getPublisherState, getSettings, savePublisherState, sweep } from "@/lib/publishing";
 import { listBrowsers, shouldHandTo, validBrowserId } from "@/lib/publish-browsers";
@@ -30,9 +35,9 @@ export async function GET(req: NextRequest) {
   try {
     // A client's own browser (gp_ key) only ever sees that company's posts;
     // the workspace browser never sees companies set to publish on their own. (v4.42.0)
-    const caller = await resolvePublishCaller(req);
+    const caller = await resolvePublishExtensionCaller(req);
     if (!caller.ok) {
-      return NextResponse.json({ success: false, code: caller.reason, error: "Extension not bound to a workspace" }, { status: 401 });
+      return NextResponse.json({ success: false, code: caller.reason, error: caller.reason === "not_internal" ? "Publish is for the Gershon workspace only" : "Extension not bound to a workspace" }, { status: refusedStatus(caller.reason) });
     }
     const orgId = caller.orgId;
     const st = await getPublisherState(orgId, caller.clientId);

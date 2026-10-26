@@ -8,9 +8,14 @@ export const runtime = "edge";
  *   "clicked_unconfirmed" clicked Post, not visible yet → POSTED, confirmed later
  *                         by the collection. Never retried.
  *   "failed_before_click" nothing reached the network → retried (3 tries), then FAILED
+ *
+ * v0.6.0: the workspace token must belong to the Gershon (primary) workspace —
+ * Publish is internal (lib/publish-extension-caller.ts). Claim semantics are
+ * unchanged. Called by Publish's own extension (publish-extension-v0.1.0).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { deliveryScope, resolvePublishCaller } from "@/lib/publish-caller";
+import { deliveryScope } from "@/lib/publish-caller";
+import { refusedStatus, resolvePublishExtensionCaller } from "@/lib/publish-extension-caller";
 import prisma from "@/lib/db-raw";
 import {
   MAX_ATTEMPTS, NET_LABEL, addEvent, alertTeam, esc, getPublisherState, quote, rollUp, savePublisherState, type Net,
@@ -25,9 +30,9 @@ function postIdFrom(url: string | null | undefined): string | null {
 
 export async function POST(req: NextRequest) {
   try {
-    const caller = await resolvePublishCaller(req);
+    const caller = await resolvePublishExtensionCaller(req);
     if (!caller.ok) {
-      return NextResponse.json({ success: false, code: caller.reason, error: "Extension not bound to a workspace" }, { status: 401 });
+      return NextResponse.json({ success: false, code: caller.reason, error: caller.reason === "not_internal" ? "Publish is for the Gershon workspace only" : "Extension not bound to a workspace" }, { status: refusedStatus(caller.reason) });
     }
     const b = (await req.json().catch(() => null)) as { id?: string; outcome?: string; postUrl?: string | null; error?: string | null; browser?: string } | null;
     if (!b?.id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
@@ -77,7 +82,7 @@ export async function POST(req: NextRequest) {
       await rollUp(d.contentId);
       if (status === "FAILED") {
         const item = await prisma.contentItem.findUnique({ where: { id: d.contentId }, select: { version: true } });
-        await addEvent(caller.orgId, d.contentId, item?.version ?? 1, "failed", "team", "Social", `${NET_LABEL[d.platform as Net] ?? d.platform}: ${error || "failed"}`);
+        await addEvent(caller.orgId, d.contentId, item?.version ?? 1, "failed", "team", "Publish", `${NET_LABEL[d.platform as Net] ?? d.platform}: ${error || "failed"}`);
       }
     }
     return NextResponse.json({ success: true, data: { status } });

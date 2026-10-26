@@ -8,6 +8,7 @@ import {
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/linkedin-auth";
 import { completeLinkedInLogin, readRequestContext } from "@/lib/linkedin-login-flow";
+import { PRODUCT_HOME } from "@/lib/product";
 
 /**
  * GET /api/auth/linkedin/login/callback
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
     }
 
     const jwt = await mintSessionToken(outcome.user);
-    const res = NextResponse.redirect(`${base}/dashboard`);
+    const res = NextResponse.redirect(`${base}${PRODUCT_HOME}`);
     res.cookies.set(sessionCookieName(), jwt, {
       httpOnly: true,
       secure: base.startsWith("https://"),

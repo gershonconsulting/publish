@@ -1,26 +1,33 @@
 /**
- * Single source of truth for the shipped Chrome-extension version.
+ * Single source of truth for the shipped PUBLISH Chrome-extension version
+ * ("Publish by Gershon.AI — LinkedIn & X Publisher", v0.6.0 of the app).
  *
- * Bump EXTENSION_LATEST whenever a new build is published to
- * public/social-extension-v<version>.zip. Consumed by:
+ * Bump EXTENSION_LATEST together with extension-src/manifest.json: the build
+ * (scripts/build-extension.mjs) FAILS when they differ, because every download
+ * link is built from this constant. Consumed by:
  *   - GET /api/extension/version  (the popup's update check)
- *   - the public home page        (download card)
+ *   - the red "out of date" banner on every page (shared layout)
+ *   - /extension (download + Load unpacked)
+ *
+ * This is NOT Social's extension (social-extension-v0.25.x). Publish's own
+ * extension only publishes; it never collects.
  */
-export const EXTENSION_LATEST = "0.25.1";
+import { PRODUCT_VERSION } from "@/lib/product";
 
-/**
- * The download carries its version in the file name, like the other Gershon
- * extensions (radar-extension-v1.15.0.zip, nexashare-extension-1.2.27.zip),
- * so a downloaded file always says which build it is. Written at build time by
- * scripts/build-extension.mjs from extension-src/manifest.json; the build
- * fails if that version and EXTENSION_LATEST differ. The unversioned
- * social-extension.zip / gershonai-extension.zip stay as aliases for old links.
- */
-export const EXTENSION_ZIP_NAME = `social-extension-v${EXTENSION_LATEST}.zip`;
+export const EXTENSION_LATEST = "0.1.0";
+
+export const EXTENSION_NAME = "Publish by Gershon.AI — LinkedIn & X Publisher";
+
+/** The download carries its version in the file name, like the other Gershon extensions. */
+export const EXTENSION_ZIP_NAME = `publish-extension-v${EXTENSION_LATEST}.zip`;
 export const EXTENSION_ZIP_URL = `/${EXTENSION_ZIP_NAME}`;
 
-/** App version — keep in sync with package.json. Shown in the home-page footer. */
-export const APP_VERSION = "4.63.0";
+/** The folder on Olivier's computer that Chrome loads the unpacked extension from. */
+export const EXTENSION_UNPACKED_FOLDER =
+  "C:\\Users\\oatti\\Documents\\Claude\\Projects\\Social Gershon Consulting\\publish-chrome-extension";
 
-// 2026-10-07: account moved to Workers Paid (the free plan's 10 ms CPU cap
-// caused the 1102/1101 errors). Redeployed so the deployment picks it up.
+/** Browser ids the Publish extension registers with (Social's start "ag_"). */
+export const PUBLISH_BROWSER_ID_PREFIX = "pb_";
+
+/** App version — the Publish product version (shown in reports and file names). */
+export const APP_VERSION = PRODUCT_VERSION;

@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { Check, Download, Loader2 } from "lucide-react";
 import { EXTENSION_ZIP_URL, EXTENSION_ZIP_NAME } from "@/lib/extension-version";
 import { PRODUCT_LOGIN_HEADLINE, PRODUCT_LOGIN_SUBLINE, PRODUCT_LOGIN_POINTS } from "@/lib/product";
+import { PRODUCT_HOME } from "@/lib/product";
 
 const POINTS: readonly string[] = PRODUCT_LOGIN_POINTS;
 
@@ -47,7 +48,7 @@ export default function LoginPage() {
     if (result?.error) {
       setError("Invalid email or password.");
     } else {
-      router.push("/dashboard");
+      router.push(PRODUCT_HOME);
     }
   }
 
@@ -165,7 +166,7 @@ export default function LoginPage() {
           className="mt-6 inline-flex items-center gap-1.5 text-[13px] font-medium text-gray-600 hover:text-gray-900"
         >
           <Download size={14} />
-          Download the Social Chrome extension
+          Download the Publish Chrome extension
         </a>
       </section>
     </div>

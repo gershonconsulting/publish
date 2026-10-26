@@ -8,9 +8,13 @@ export const runtime = "edge";
  *   → { enabled, voice: { x, linkedin } }
  * Every 5 minutes and at once on any sign-in / sign-out. Drives the "Live"
  * strip on the Publishing pages and Settings.
+ *
+ * v0.6.0: the workspace token must belong to the Gershon (primary) workspace —
+ * Publish is internal (lib/publish-extension-caller.ts). Claim semantics are
+ * unchanged. Called by Publish's own extension (publish-extension-v0.1.0).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { resolvePublishCaller } from "@/lib/publish-caller";
+import { refusedStatus, resolvePublishExtensionCaller } from "@/lib/publish-extension-caller";
 import prisma from "@/lib/db-raw";
 import { clientRoutedIds, destinationsOf, getPublisherState, getSettings, getTarget, normalizeHandle, savePublisherState, sweep, PUBLISHING_CLIENT_WHERE, type NetSession } from "@/lib/publishing";
 import { getBrowser, LI_CHECK_TTL_MS, LI_FAIL_TTL_MS, liKey, saveBrowser, validBrowserId, xKey, type PublishBrowser } from "@/lib/publish-browsers";
@@ -94,9 +98,9 @@ function merge(prev: NetSession, next: In, now: string, isX: boolean): NetSessio
 
 export async function POST(req: NextRequest) {
   try {
-    const caller = await resolvePublishCaller(req);
+    const caller = await resolvePublishExtensionCaller(req);
     if (!caller.ok) {
-      return NextResponse.json({ success: false, code: caller.reason, error: "Extension not bound to a workspace" }, { status: 401 });
+      return NextResponse.json({ success: false, code: caller.reason, error: caller.reason === "not_internal" ? "Publish is for the Gershon workspace only" : "Extension not bound to a workspace" }, { status: refusedStatus(caller.reason) });
     }
     const b = (await req.json().catch(() => null)) as {
       x?: In & { accounts?: string[] }; linkedin?: In & { name?: string | null }; version?: string; error?: string | null; browser?: BrowserIn; probes?: Probe[];
@@ -127,8 +131,8 @@ export async function POST(req: NextRequest) {
         enabled: settings.enabled,
         checkLinkedIn,
         voice: {
-          x: caller.clientId ? "X signed you out. Please sign back in so your scheduled posts can go out." : `${lead}I need you now. Project: Social. Task: X signed you out. Please sign back in so scheduled posts can go out.`,
-          linkedin: caller.clientId ? "LinkedIn signed you out. Please sign back in so your scheduled posts can go out." : `${lead}I need you now. Project: Social. Task: LinkedIn signed you out. Please sign back in so scheduled posts can go out.`,
+          x: caller.clientId ? "X signed you out. Please sign back in so your scheduled posts can go out." : `${lead}I need you now. Project: Publish. Task: X signed you out. Please sign back in so scheduled posts can go out.`,
+          linkedin: caller.clientId ? "LinkedIn signed you out. Please sign back in so your scheduled posts can go out." : `${lead}I need you now. Project: Publish. Task: LinkedIn signed you out. Please sign back in so scheduled posts can go out.`,
         },
       },
     });

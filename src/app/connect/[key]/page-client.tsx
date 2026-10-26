@@ -41,11 +41,11 @@ export function ConnectClient({ keyId }: { keyId: string }) {
     const t = setInterval(load, 20000);
     function onMsg(e: MessageEvent) {
       if (e.source !== window || !e.data) return;
-      if (e.data.type === "GERSHONAI_PONG" || e.data.type === "GERSHONAI_HELLO") setExt({ state: "found", version: e.data.version });
-      if (e.data.type === "GERSHONAI_BOUND" && e.data.publishing) setBound(true);
+      if (e.data.type === "PUBLISH_PONG" || e.data.type === "PUBLISH_HELLO") setExt({ state: "found", version: e.data.version });
+      if (e.data.type === "PUBLISH_BOUND" && e.data.client) setBound(true);
     }
     window.addEventListener("message", onMsg);
-    window.postMessage({ type: "GERSHONAI_PING" }, location.origin);
+    window.postMessage({ type: "PUBLISH_PING" }, location.origin);
     const miss = setTimeout(() => setExt((s) => (s.state === "checking" ? { state: "missing" } : s)), 2500);
     return () => { clearInterval(t); clearTimeout(miss); window.removeEventListener("message", onMsg); };
   }, [load]);
@@ -55,7 +55,7 @@ export function ConnectClient({ keyId }: { keyId: string }) {
   if (err && !data) return <Center><p className="text-gray-700">{err}</p></Center>;
   if (!data) return <Center><Loader2 className="animate-spin text-gray-400" /></Center>;
 
-  const tooOld = ext.state === "found" && ext.version && older(ext.version, "0.17.0");
+  const tooOld = ext.state === "found" && ext.version && older(ext.version, data?.latest || "0.1.0");
   const live = data.live.overall.level === "live";
 
   return (

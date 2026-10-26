@@ -28,6 +28,7 @@ const SECTIONS: [string, string][] = [
   ["/followers", "Portfolio"],
   ["/reports", "Portfolio"],
   ["/publishing", "Publishing"],
+  ["/extension", "Publish"],
   ["/logs", "System"],
   ["/errors", "System"],
   ["/admin", "Workspace"],

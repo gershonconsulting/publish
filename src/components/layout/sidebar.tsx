@@ -35,6 +35,7 @@ import { FilterPanel } from "./filter-panel";
 import { ClientList } from "./client-list";
 import { useSelectedClient } from "@/lib/selected-client";
 import { cn } from "@/lib/utils";
+import { PRODUCT_HOME } from "@/lib/product";
 
 type NavItem = {
   href: string;
@@ -47,11 +48,15 @@ const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: "Publish",
     items: [
+      // v0.6.0: Publish's own Dashboard + Summary first, its own extension last.
+      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+      { href: "/summary", icon: LayoutList, label: "Summary" },
       { href: "/publishing", icon: Send, label: "Content & review" },
       { href: "/publishing/calendar", icon: CalendarDays, label: "Calendar" },
       { href: "/publishing/accounts", icon: Link2, label: "Connections" },
       { href: "/publishing/autopilot", icon: Bot, label: "Autopilot" },
       { href: "/knowledge-base", icon: BookOpen, label: "Knowledge Base" },
+      { href: "/extension", icon: Puzzle, label: "Extension" },
     ],
   },
 ];
@@ -109,7 +114,7 @@ export function Sidebar() {
     <aside className="w-[248px] flex-shrink-0 bg-[#111317] text-gray-300 flex flex-col h-screen sticky top-0 border-r border-[#1F2229]">
       {/* Brand */}
       <div className="px-5 pt-5 pb-4 border-b border-[#1F2229]">
-        <Link href="/publishing" className="flex items-center gap-2.5">
+        <Link href={PRODUCT_HOME} className="flex items-center gap-2.5">
           <SocialMark size={32} className="flex-shrink-0" />
           <SocialWordmark dark />
         </Link>
@@ -123,7 +128,10 @@ export function Sidebar() {
               {group.label}
             </div>
             {group.items.map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+              // "/publishing" must not light up on /publishing/calendar etc. — those have their own entries.
+              const isActive =
+                pathname === item.href ||
+                (pathname.startsWith(item.href + "/") && !group.items.some((o) => o.href !== item.href && o.href.startsWith(item.href + "/") && pathname.startsWith(o.href)));
               return (
                 <div key={item.href}>
                   <Link

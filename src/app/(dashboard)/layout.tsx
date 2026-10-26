@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { ViewFiltersProvider } from "@/lib/view-filters";
 import { SelectedClientProvider } from "@/lib/selected-client";
 import { ApiRetry } from "@/components/layout/api-retry";
+import { PublishExtensionBanner } from "@/components/layout/publish-extension-banner";
 import { PRODUCT_NAME, PRODUCT_VERSION } from "@/lib/product";
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
@@ -42,6 +43,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <Sidebar />
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-[1400px] mx-auto px-9 pt-7 pb-10">
+            {/* v0.6.0: red banner when the Publish extension here is out of date, notice when missing. */}
+            <PublishExtensionBanner />
             {children}
             <footer className="mt-12 pt-4 border-t border-gray-200 text-[11px] text-gray-500 font-mono">
               {PRODUCT_NAME} v{PRODUCT_VERSION}

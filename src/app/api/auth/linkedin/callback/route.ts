@@ -8,6 +8,7 @@ import {
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/linkedin-auth";
 import { siteUrl } from "@/lib/site";
+import { PRODUCT_HOME } from "@/lib/product";
 
 /**
  * Finishes the SIGN-IN flow, which comes back through this same URL because
@@ -36,7 +37,7 @@ async function finishSignIn(req: NextRequest, code: string, state: string): Prom
   }
 
   const jwt = await mintSessionToken(outcome.user);
-  const res = NextResponse.redirect(`${base}/dashboard`);
+  const res = NextResponse.redirect(`${base}${PRODUCT_HOME}`);
   res.cookies.set(sessionCookieName(), jwt, {
     httpOnly: true,
     secure: base.startsWith("https://"),

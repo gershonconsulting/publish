@@ -11,6 +11,62 @@ SPEC: docs/THREE-PLATFORM-SPLIT.md (sections 2, 14-17 for this product).
 SIBLINGS: social.gershon.ai (repo social), Social Tracking (socialtracking.gershon.ai).
 
 STATUS
+[NOTE] v0.4.0 (numbered PUB emails) and v0.5.0 (publishing engine + crons moved here from
+       Social) were committed by another session - see git log.
+[BUILT] v0.6.0 (2026-10-26) - NOT DEPLOYED YET - awaiting Olivier's approval.
+        Deploy = empty commit on the social repo, branch deploy/publish (workflow deploy-siblings.yml).
+  ✅ /dashboard - Publish's own dashboard, now PRODUCT_HOME (sign-in lands here):
+       next actions ("Acme: 3 approved posts needed by Wednesday" + link), throughput,
+       next 7 days (company / network / target / local time + ET, hand-drawn SVG bars),
+       content runway (slot-based vs posts-per-week objective from Social's Campaign
+       objectives, 5/wk default; scheduled vs approved kept separate; this month + next),
+       approval bottlenecks (client / internal / revision, age in stage, revisions),
+       delivery health per network (published = claim, verified = Social's collection,
+       failed, missed, stuck POSTING), connection readiness per company + publishing Chromes.
+       Window: Last week / Last month / This month / This year / All time. Follows the
+       left-menu client. A section that cannot be read says "Unavailable", never 0.
+       Read-only; lib/publish-dashboard.ts + lib/publish-runway.ts (pure, tested).
+  ✅ /summary - one row per CAMPAIGN/INTERNAL company for a month: drafted, in review,
+       approved, scheduled, published, failed, next scheduled, runway, last published,
+       links to Content + Calendar. Month picker.
+  ✅ Sidebar: Dashboard, Summary, Content & review, Calendar, Connections, Autopilot,
+       Knowledge Base, Extension.
+  ✅ Own Chrome extension "Publish by Gershon.AI — LinkedIn & X Publisher" v0.1.0
+       (toolbar "Publish by Gershon.AI — Publish"). Source: extension-src/ (publishing only:
+       gx-boot, background, gx-token, gx-publish, gx-bridge, content, gx-visible, gx-update,
+       popup). NO collection code (build fails if gx-collect/gx-linkedin/sync-core/gx-remote
+       appear). Hosts: linkedin, x/twitter, publish.gershon.ai only. Bridge PUBLISH_PING /
+       PUBLISH_PONG {version} (+ PUBLISH_HELLO, PUBLISH_BOUND); storage keys publish*;
+       browser ids "pb_" (Social's "ag_"); background marker "#pb-bg" (Social's "#gx-bg").
+       Publishes in its own minimized never-focused window, visible-window retry on a
+       pre-click failure. Icon: red rounded square + white paper plane (scripts/publish-icon.mjs).
+       Zip: public/publish-extension-v0.1.0.zip, built by scripts/build-extension.mjs on every
+       `npm run build`; build FAILS if manifest version != EXTENSION_LATEST
+       (src/lib/extension-version.ts, single source of truth).
+  ✅ Server: /api/extension/{bind,version,seen} added; publish/{due,result,heartbeat}
+       (moved here in v0.5.0) now also refuse a non-Gershon workspace token (403;
+       gp_ keys accepted as before) - lib/publish-extension-caller.ts. Voice alerts say
+       "Project: Publish". Claim semantics unchanged (SCHEDULED->POSTING updateMany) and
+       publish-browsers routing intact: if Social's extension still publishes from the same
+       queue during the transition, nothing goes out twice.
+       Middleware lets /api/extension/version + /api/extension/publish/* through (token checked
+       in-route); bind + seen stay behind the session + Gershon gate. "Seen" uses its own key
+       publish_ext_installed. No Prisma schema change.
+  ✅ Red banner on every page when the installed Publish extension < EXTENSION_LATEST;
+       amber "not installed in this Chrome" notice (hide for today). /extension page: both
+       install routes side by side (download | Load unpacked from
+       C:\Users\oatti\Documents\Claude\Projects\Social Gershon Consulting\publish-chrome-extension),
+       publishing Chromes seen (version, last seen, networks), last deliveries.
+  ✅ Checks: npm ci, tsc --noEmit, npm run build, tests/publish-browsers.test.mts +
+       tests/publish-runway.test.mts (npx tsx --test) all pass.
+  ❌ Deploy v0.6.0 (awaiting Olivier's OK) - empty commit on social repo branch deploy/publish.
+  ❌ Copy extension-src/ into the publish-chrome-extension folder on Olivier's computer and
+       Load unpacked it in the "Oattia" Chrome (Claude via the desktop app) - after deploy.
+  ❌ Not checked against live data (no DB access from the build box): open /dashboard and
+       /summary after deploy and compare a few numbers with the Calendar.
+  ❌ LinkedIn sign-out voice watchdog not ported on purpose (Social's extension already
+       alerts; Publish emails via the sweep when LinkedIn posts are on hold). Revisit when
+       Social's extension stops publishing (retire its gx-publish at cutover).
 [DONE] ✅ LIVE 2026-10-26: https://publish.gershon.ai v0.2.0 - ping, / -> /login, /api/clients 401,
        LinkedIn accepts the sign-in request (client 86ju2np6725xfp).
 [TODO] ❌ full sign-in + menu check by Olivier (LinkedIn asked for his password).
@@ -42,7 +98,7 @@ STATUS
        workflow backup-db.yml (encrypted pg_dump -> R2 gershon-backups + artifact)
 [TODO] own datastore + versioned contracts (spec 5-6)
 [TODO] move this product's crons out of Social at cutover (spec 9)
-[TODO] dashboards / weekly + monthly reports / alerts (spec 14-17)
+[PARTLY] dashboards ✅ (v0.6.0) / ❌ weekly + monthly reports / ❌ alerts (spec 14-17)
 
 DEPLOY: social repo, workflow deploy-siblings.yml, push branch deploy/publish.
 Pages project: gershon-publish. LinkedIn app redirect:

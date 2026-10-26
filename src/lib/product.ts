@@ -1,8 +1,9 @@
 /** Which of the three Gershon platforms this build is. */
 export const PRODUCT_NAME = "Publish";
-export const PRODUCT_HOME = "/publishing";
+/** v0.6.0: Publish's own Dashboard is the landing page (and the sign-in redirect). */
+export const PRODUCT_HOME = "/dashboard";
 export const PRODUCT_TAGLINE = "Create, approve, schedule and publish";
-export const PRODUCT_VERSION = "0.5.0";
+export const PRODUCT_VERSION = "0.6.0";
 
 /** Sign-in page copy (v0.2.1: was still Social's copy). */
 export const PRODUCT_LOGIN_HEADLINE = "Create, approve and publish every campaign post.";

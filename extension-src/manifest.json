@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "Publish by Gershon.AI — LinkedIn & X Publisher",
+  "version": "0.1.0",
+  "description": "Publishes the approved, scheduled posts of publish.gershon.ai on the company LinkedIn pages and X accounts, from this browser, at their scheduled time. Collects nothing. Does nothing until someone signs in to publish.gershon.ai in this browser.",
+  "permissions": [
+    "cookies",
+    "tabs",
+    "storage",
+    "scripting",
+    "alarms",
+    "tts",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://linkedin.com/*",
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "https://publish.gershon.ai/*"
+  ],
+  "background": {
+    "service_worker": "gx-boot.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Publish by Gershon.AI — Publish",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/*",
+        "https://linkedin.com/*",
+        "https://x.com/*",
+        "https://twitter.com/*"
+      ],
+      "js": [
+        "gx-visible.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://publish.gershon.ai/*"
+      ],
+      "js": [
+        "gx-bridge.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

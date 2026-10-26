@@ -1,11 +1,13 @@
 /**
- * The Social app icon as PNG, drawn in plain JavaScript — no image library and
- * no binary file in the repo (the tooling that writes here can only send text).
- * Same drawing as src/app/icon.svg / components/brand/social-mark.tsx, which
- * reproduce Social's official app icon: red outline, white ring, red rounded
- * square split light/dark on the diagonal, white "share" glyph. 64-unit grid.
+ * The Publish extension icon as PNG, drawn in plain JavaScript — no image
+ * library and no binary file in the repo. Gershon red rounded square with a
+ * white paper plane (the "send" glyph), on a 64-unit grid, 4×4 supersampled.
+ *
+ *   node scripts/publish-icon.mjs   → writes extension-src/icons/icon{16,48,128}.png
  */
 import { deflateSync } from "node:zlib";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 function inRound(x, y, x0, y0, w, h, r) {
   if (x < x0 || y < y0 || x > x0 + w || y > y0 + h) return false;
@@ -14,35 +16,45 @@ function inRound(x, y, x0, y0, w, h, r) {
   return (x - cx) ** 2 + (y - cy) ** 2 <= r * r;
 }
 
-function nearSegment(x, y, ax, ay, bx, by, w) {
-  const dx = bx - ax, dy = by - ay;
-  const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)));
-  const px = ax + t * dx, py = ay + t * dy;
-  return (x - px) ** 2 + (y - py) ** 2 <= (w / 2) ** 2;
+/** Point in polygon (even-odd). */
+function inPoly(x, y, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i];
+    const [xj, yj] = pts[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
 }
 
 const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 
-const OUTLINE = hex("#C8201A");
-const RING_A = hex("#FFFFFF"), RING_B = hex("#D5D7D8");
-const RED = [hex("#E3382B"), hex("#D02C20"), hex("#BB241A"), hex("#A51D15")];
-const GLYPH = hex("#EDEDED");
+const RED_TOP = hex("#E3382B");
+const RED_BOTTOM = hex("#B3221A");
+const WHITE = hex("#FFFFFF");
+const FOLD = hex("#D9DCE0");
+
+// Paper plane: nose at the top right, wings to the left, tail at the bottom.
+const PLANE = [
+  [11, 31],
+  [53, 12],
+  [36, 52],
+  [28, 38],
+];
+// The darker fold under the right wing.
+const FOLD_TRI = [
+  [28, 38],
+  [53, 12],
+  [31, 48],
+];
 
 /** Colour of the icon at (x, y) on the 64 grid, or null outside it. */
 function colourAt(x, y) {
-  if (!inRound(x, y, 0.6, 0.6, 62.8, 62.8, 27.9)) return null;
-  if (!inRound(x, y, 2.4, 2.4, 59.2, 59.2, 26.1)) return OUTLINE;
-  if (!inRound(x, y, 6.5, 6.5, 51, 51, 21)) return mix(RING_A, RING_B, (x + y) / 128);
-  const glyph =
-    (x - 25.5) ** 2 + (y - 32) ** 2 <= 25 ||
-    (x - 39) ** 2 + (y - 25) ** 2 <= 27.04 ||
-    (x - 39) ** 2 + (y - 39) ** 2 <= 27.04 ||
-    nearSegment(x, y, 25.5, 32, 39, 25, 3.8) ||
-    nearSegment(x, y, 25.5, 32, 39, 39, 3.8);
-  if (glyph) return GLYPH;
-  const t = (x - 6.5 + (y - 6.5)) / 102;
-  return t < 0.52 ? mix(RED[0], RED[1], t / 0.52) : mix(RED[2], RED[3], (t - 0.52) / 0.48);
+  if (!inRound(x, y, 1, 1, 62, 62, 14)) return null;
+  if (inPoly(x, y, FOLD_TRI)) return FOLD;
+  if (inPoly(x, y, PLANE)) return WHITE;
+  return mix(RED_TOP, RED_BOTTOM, (x + y) / 128);
 }
 
 const CRC = (() => {
@@ -69,12 +81,12 @@ function chunk(type, data) {
 }
 
 /** A size×size RGBA PNG of the icon, 4×4 supersampled. */
-export function socialIconPng(size) {
+export function publishIconPng(size) {
   const S = 4;
   const row = size * 4 + 1;
   const raw = Buffer.alloc(size * row);
   for (let py = 0; py < size; py++) {
-    raw[py * row] = 0; // filter: none
+    raw[py * row] = 0;
     for (let px = 0; px < size; px++) {
       let r = 0, g = 0, b = 0, a = 0;
       for (let sy = 0; sy < S; sy++) {
@@ -96,12 +108,18 @@ export function socialIconPng(size) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0);
   ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8; // bit depth
-  ihdr[9] = 6; // RGBA
+  ihdr[8] = 8;
+  ihdr[9] = 6;
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk("IHDR", ihdr),
     chunk("IDAT", deflateSync(raw)),
     chunk("IEND", Buffer.alloc(0)),
   ]);
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  mkdirSync("extension-src/icons", { recursive: true });
+  for (const size of [16, 48, 128]) writeFileSync(`extension-src/icons/icon${size}.png`, publishIconPng(size));
+  console.log("publish-icon: wrote extension-src/icons/icon{16,48,128}.png");
 }

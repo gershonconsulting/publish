@@ -16,8 +16,19 @@ STATUS
        CAMPAIGN and INTERNAL companies only; Social covers the whole ecosystem
        (internal, campaign, partners, competition...). Enforced in
        src/lib/scoped-db.ts (scopeCategory) + /api/clients. List: lib/product.ts.
-[TODO] deploy (scheduled task #30, 11:00 ET 2026-10-26) - not live yet
-[DONE] DB backup before split: social repo branch backup/social-db,
+[DONE] ✅ deploy v0.2.0 (task #30, 2026-10-26 15:09 UTC) -> https://gershon-publish.pages.dev
+       ✅ /api/ping version 0.2.0 | ✅ / -> /login | ✅ GET /api/clients = 401
+       ✅ Sign-in builds correct client_id + redirect_uri
+       Deploy = social repo branch deploy/publish (workflow deploy-siblings.yml).
+[TODO] ❌ custom domain publish.gershon.ai: attached to the Pages project (status pending)
+       but NO DNS record - the CLOUDFLARE_API_TOKEN cannot edit DNS (code 10000).
+       Fix: Cloudflare dashboard -> Workers & Pages -> gershon-publish -> Custom domains
+       -> Activate (creates the CNAME), or give the token Zone:DNS:Edit.
+[TODO] ❌ LINKEDIN_CLIENT_SECRET not in GitHub secrets yet
+       (PUBLISH_LINKEDIN_CLIENT_SECRET in social repo) -> sign-in cannot finish.
+[TODO] ✅ LinkedIn app Publish: openid/profile/email OK (consent screen reached, redirect_uri accepted).
+[DONE] ✅ DB backup 2026-10-26 15:01 UTC: 9,299 rows / 18 tables (run 40345226157);
+       DB backup before split: social repo branch backup/social-db,
        workflow backup-db.yml (encrypted pg_dump -> R2 gershon-backups + artifact)
 [TODO] own datastore + versioned contracts (spec 5-6)
 [TODO] move this product's crons out of Social at cutover (spec 9)

@@ -273,3 +273,64 @@ Pages project: {CFG["project"]}. LinkedIn app redirect:
 https://{CFG["host"]}/api/auth/linkedin/callback
 DB: shared Neon DB (CF_DATABASE_URL). Never prisma db push from here.
 ''')
+# 14. Olivier 2026-10-26: Publish and Social Tracking serve CAMPAIGN + INTERNAL
+#     companies only; Social covers the whole ecosystem. Enforced in the scoped
+#     data layer (every scoped read) and in the raw company list.
+p='src/lib/product.ts'; s=open(p).read()
+s+='''
+/**
+ * Company categories this product serves (Olivier, 2026-10-26): Publish and
+ * Social Tracking are for our CAMPAIGN clients and INTERNAL (Gershon) only.
+ * Social keeps the whole ecosystem (partners, competition, prospects...).
+ */
+export const PRODUCT_CLIENT_TYPES = ["CAMPAIGN", "INTERNAL"] as const;
+'''
+open(p,'w').write(s)
+p='src/lib/scoped-db.ts'; s=open(p).read()
+s=s.replace('import prisma from "@/lib/db-raw";','import prisma from "@/lib/db-raw";\nimport { PRODUCT_CLIENT_TYPES } from "@/lib/product";',1)
+s=s.replace('function mergeWhere(','''/** Models whose rows belong to one company (relation field `client`). */
+const CLIENT_LINKED = new Set([
+  "PlatformConnection", "PostingSchedule", "SocialPost", "DailyCompliance",
+  "FollowerSnapshot", "ContentAnalysis", "PostPrompt",
+]);
+
+/**
+ * Product scope on top of the tenant scope: this app only sees companies in
+ * PRODUCT_CLIENT_TYPES (and rows that belong to them). Reads only — a write
+ * aimed at an out-of-scope company finds nothing to read it from in the UI.
+ */
+function scopeCategory(model: string, args: Record<string, unknown>): Record<string, unknown> {
+  const where = (args.where ?? {}) as Record<string, unknown>;
+  const types = { in: [...PRODUCT_CLIENT_TYPES] };
+  if (model === "Client") return { ...args, where: { AND: [where, { clientType: types }] } };
+  if (CLIENT_LINKED.has(model)) return { ...args, where: { AND: [where, { client: { is: { clientType: types } } }] } };
+  return args;
+}
+
+function mergeWhere(''',1)
+s=s.replace('            return run(mergeWhere(a, orgId));\n          }\n\n          // findUnique','            return run(scopeCategory(model, mergeWhere(a, orgId)));\n          }\n\n          // findUnique',1)
+s=s.replace(').findFirst(mergeWhere(a, orgId));',').findFirst(scopeCategory(model, mergeWhere(a, orgId)));',1)
+open(p,'w').write(s)
+p='src/app/api/clients/route.ts'
+if os.path.exists(p):
+    s=open(p).read()
+    old='''  const clientType = searchParams.get("clientType");
+  if (clientType) {
+    where.clientType = clientType;
+  }'''
+    new='''  // This product only serves CAMPAIGN + INTERNAL companies (see lib/product.ts).
+  const clientType = searchParams.get("clientType");
+  const allowed = PRODUCT_CLIENT_TYPES as readonly string[];
+  where.clientType = clientType && allowed.includes(clientType) ? clientType : { in: [...allowed] };'''
+    assert old in s
+    s=s.replace(old,new,1)
+    s='import { PRODUCT_CLIENT_TYPES } from "@/lib/product";\n'+s if not s.startswith('export const runtime') else s.replace("\n", '\nimport { PRODUCT_CLIENT_TYPES } from "@/lib/product";\n',1)
+    open(p,'w').write(s)
+p='src/app/api/export/route.ts'
+if os.path.exists(p):
+    s=open(p).read()
+    old='`SELECT name FROM clients WHERE id = $1 AND "organizationId" = $2`'
+    assert old in s
+    s=s.replace(old,'''`SELECT name FROM clients WHERE id = $1 AND "organizationId" = $2 AND "clientType"::text IN ('CAMPAIGN','INTERNAL')`''',1)
+    open(p,'w').write(s)
+print('scoped',app)

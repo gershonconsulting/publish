@@ -12,6 +12,13 @@ SIBLINGS: social.gershon.ai (repo social), Social Tracking (socialtracking.gersh
 
 STATUS
 [DONE] v0.1.0 phase 1: split UI/API, internal-only gate, own domain.
+[DONE] v0.2.0 scope rule (Olivier 2026-10-26): Publish + Social Tracking serve
+       CAMPAIGN and INTERNAL companies only; Social covers the whole ecosystem
+       (internal, campaign, partners, competition...). Enforced in
+       src/lib/scoped-db.ts (scopeCategory) + /api/clients. List: lib/product.ts.
+[TODO] deploy (scheduled task #30, 11:00 ET 2026-10-26) - not live yet
+[DONE] DB backup before split: social repo branch backup/social-db,
+       workflow backup-db.yml (encrypted pg_dump -> R2 gershon-backups + artifact)
 [TODO] own datastore + versioned contracts (spec 5-6)
 [TODO] move this product's crons out of Social at cutover (spec 9)
 [TODO] dashboards / weekly + monthly reports / alerts (spec 14-17)

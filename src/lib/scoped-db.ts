@@ -42,6 +42,7 @@
  * through db.ts. The token read below is the same nine lines, standing alone.
  */
 import prisma from "@/lib/db-raw";
+import { PRODUCT_CLIENT_TYPES } from "@/lib/product";
 import { freshUser } from "@/lib/fresh-user";
 import { getToken } from "next-auth/jwt";
 import { cookies } from "next/headers";
@@ -200,6 +201,25 @@ export function flattenCompoundUnique(where: Record<string, unknown>): Record<st
   return out;
 }
 
+/** Models whose rows belong to one company (relation field `client`). */
+const CLIENT_LINKED = new Set([
+  "PlatformConnection", "PostingSchedule", "SocialPost", "DailyCompliance",
+  "FollowerSnapshot", "ContentAnalysis", "PostPrompt",
+]);
+
+/**
+ * Product scope on top of the tenant scope: this app only sees companies in
+ * PRODUCT_CLIENT_TYPES (and rows that belong to them). Reads only — a write
+ * aimed at an out-of-scope company finds nothing to read it from in the UI.
+ */
+function scopeCategory(model: string, args: Record<string, unknown>): Record<string, unknown> {
+  const where = (args.where ?? {}) as Record<string, unknown>;
+  const types = { in: [...PRODUCT_CLIENT_TYPES] };
+  if (model === "Client") return { ...args, where: { AND: [where, { clientType: types }] } };
+  if (CLIENT_LINKED.has(model)) return { ...args, where: { AND: [where, { client: { is: { clientType: types } } }] } };
+  return args;
+}
+
 function mergeWhere(args: Record<string, unknown>, orgId: string): Record<string, unknown> {
   const where = flattenCompoundUnique((args.where ?? {}) as Record<string, unknown>);
   return { ...args, where: { ...where, organizationId: orgId } };
@@ -248,7 +268,7 @@ function buildScoped(orgId: string) {
           const run = query as unknown as (x: unknown) => Promise<unknown>;
 
           if (READ_OPS.has(operation)) {
-            return run(mergeWhere(a, orgId));
+            return run(scopeCategory(model, mergeWhere(a, orgId)));
           }
 
           // findUnique cannot carry a scope, so read it as findFirst instead.
@@ -257,7 +277,7 @@ function buildScoped(orgId: string) {
               prisma[toDelegate(model)] as unknown as {
                 findFirst: (x: unknown) => Promise<unknown>;
               }
-            ).findFirst(mergeWhere(a, orgId));
+            ).findFirst(scopeCategory(model, mergeWhere(a, orgId)));
             if (!row && operation === "findUniqueOrThrow") {
               throw new Error(`No ${model} found`);
             }

@@ -1,4 +1,5 @@
 export const runtime = 'edge';
+import { PRODUCT_CLIENT_TYPES } from "@/lib/product";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import rawPrisma from "@/lib/db-raw";
@@ -114,10 +115,10 @@ export async function GET(req: NextRequest) {
   } else if (!includeArchived) {
     where.status = { not: ClientStatus.ARCHIVED };
   }
+  // This product only serves CAMPAIGN + INTERNAL companies (see lib/product.ts).
   const clientType = searchParams.get("clientType");
-  if (clientType) {
-    where.clientType = clientType;
-  }
+  const allowed = PRODUCT_CLIENT_TYPES as readonly string[];
+  where.clientType = clientType && allowed.includes(clientType) ? clientType : { in: [...allowed] };
   // ?light=1 skips the per-client latestPost enrichment. Used by the /clients
   // table view, which doesn't need post snippets and was timing out on the
   // edge runtime when fetching all socialPost rows across every company.

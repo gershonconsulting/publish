@@ -1,0 +1,22 @@
+================================================================
+HANDOFF.txt  -  publish  (publish.gershon.ai)
+Written by: Claude (Anthropic) - 2026-10-26
+================================================================
+READ FIRST: github.com/gershonconsulting/memory -> HANDOFF.txt
+Rules: Olivier never runs commands, uploads or clicks injected buttons.
+End replies with GREEN CHECK (ready to test + link) or RED CROSS (+3 options).
+
+WHAT: Publish - Create, approve, schedule and publish. Internal only.
+SPEC: docs/THREE-PLATFORM-SPLIT.md (sections 2, 14-17 for this product).
+SIBLINGS: social.gershon.ai (repo social), Social Tracking (socialtracking.gershon.ai).
+
+STATUS
+[DONE] v0.1.0 phase 1: split UI/API, internal-only gate, own domain.
+[TODO] own datastore + versioned contracts (spec 5-6)
+[TODO] move this product's crons out of Social at cutover (spec 9)
+[TODO] dashboards / weekly + monthly reports / alerts (spec 14-17)
+
+DEPLOY: social repo, workflow deploy-siblings.yml, push branch deploy/publish.
+Pages project: gershon-publish. LinkedIn app redirect:
+https://publish.gershon.ai/api/auth/linkedin/callback
+DB: shared Neon DB (CF_DATABASE_URL). Never prisma db push from here.

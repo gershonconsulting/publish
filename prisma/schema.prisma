@@ -1,0 +1,685 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  OPERATIONS
+  READ_ONLY
+}
+
+enum ClientStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  INCOMPLETE_SETUP
+  ARCHIVED
+}
+
+enum ClientType {
+  CLIENT
+  PARTNER
+  PROSPECT
+  INTERNAL
+  COMPETITION
+  COMPANY
+  CAMPAIGN
+  RECYCLED
+}
+
+enum Platform {
+  LINKEDIN
+  TWITTER
+  GOOGLE_BUSINESS
+  FACEBOOK
+  INSTAGRAM
+  TIKTOK
+  YOUTUBE
+  THREADS
+  PINTEREST
+  MEDIUM
+  REDDIT
+  BLOG_RSS
+  OTHER
+}
+
+enum ConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+  EXPIRED
+  ERROR
+  PENDING
+}
+
+enum PostingMode {
+  EVERY_DAY
+  WORKING_DAYS
+  CUSTOM_WEEKDAYS
+  CUSTOM_TARGET
+}
+
+enum ComplianceStatus {
+  GREEN
+  RED
+  YELLOW
+  GRAY
+}
+
+enum SyncStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
+enum SyncJobType {
+  POST_SYNC
+  FOLLOWER_SNAPSHOT
+  COMPLIANCE_RECOMPUTE
+  BACKFILL
+  TOKEN_HEALTH_CHECK
+  MONTHLY_REPORT
+  CONTENT_ANALYSIS
+}
+
+enum SyncScopeType {
+  ALL
+  CLIENT
+  PLATFORM_CONNECTION
+  DATE_RANGE
+}
+
+enum AuditAction {
+  CLIENT_CREATED
+  CLIENT_UPDATED
+  CLIENT_ARCHIVED
+  CLIENT_RESTORED
+  CLIENT_HARD_DELETED
+  PLATFORM_CONNECTED
+  PLATFORM_DISCONNECTED
+  PLATFORM_REQUIREMENT_CHANGED
+  POSTING_CALENDAR_CHANGED
+  MANUAL_SYNC_TRIGGERED
+  BACKFILL_TRIGGERED
+  REPORT_EXPORTED
+  USER_CREATED
+  USER_UPDATED
+}
+
+// ─── Organization (tenant) ─────────────────────────────────────────────────
+//
+// v4.0.0 — this app became multi-TENANT. Every signup gets its own workspace:
+// its own clients, partners, competition and internal accounts, and none of
+// anybody else's. Gershon Consulting is simply the first tenant (isPrimary),
+// and every row that existed before this change was adopted into it.
+//
+// Scoping is NOT enforced by hand in each query — see src/lib/tenancy.ts. One
+// forgotten `where` is a cross-tenant leak, so the filter is applied centrally.
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  // The original Gershon Consulting workspace. Exactly one row has this set;
+  // it is the org that pre-tenancy data was migrated into.
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users               User[]
+  clients             Client[]
+  platformConnections PlatformConnection[]
+  postingSchedules    PostingSchedule[]
+  socialPosts         SocialPost[]
+  dailyCompliance     DailyCompliance[]
+  followerSnapshots   FollowerSnapshot[]
+  contentAnalyses     ContentAnalysis[]
+  postPrompts         PostPrompt[]
+  syncJobs            SyncJob[]
+  auditLogs           AuditLog[]
+  orgSettings         OrgSetting[]
+  contentItems        ContentItem[]
+  contentComments     ContentComment[]
+  contentMedia        ContentMedia[]
+  scheduledPosts      ScheduledPost[]
+
+  @@index([isPrimary])
+  @@map("organizations")
+}
+
+// Per-tenant settings. The global `Setting` table stays for platform-level
+// values (the registration mode); anything holding a credential — Streak key,
+// AI keys, Phantombuster key — belongs here, because a new tenant must not be
+// able to read, or spend against, another tenant's keys.
+
+model OrgSetting {
+  id             String   @id @default(cuid())
+  organizationId String
+  key            String
+  value          String   @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, key])
+  @@map("org_settings")
+}
+
+// ─── User ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  password    String?
+  linkedinSub String?  @unique
+  image       String?
+  role        UserRole @default(OPERATIONS)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // --- v3.9.0: self-registration + who this person actually is -------------
+  // Anyone may sign up with LinkedIn. That makes it matter a great deal who
+  // just walked in, so everything LinkedIn tells us is kept, along with the
+  // request-side provenance Cloudflare gives us for free.
+
+  // Awaiting an admin's decision. Distinct from isActive=false, which means
+  // "was approved once and has since been switched off" — the two produce
+  // different sign-in messages and sit in different places in Admin > Users.
+  pendingApproval Boolean   @default(false)
+  approvedAt      DateTime?
+  approvedById    String?
+
+  // From the LinkedIn OIDC userinfo payload.
+  givenName     String?
+  familyName    String?
+  locale        String?
+  emailVerified Boolean @default(false)
+  profileJson   String? @db.Text // raw userinfo, so nothing is lost to schema drift
+
+  // How they arrived: "linkedin-self" | "linkedin-claim" | "invite" | "seed".
+  signupSource    String?
+  signupIp        String?
+  signupCountry   String?
+  signupUserAgent String?
+
+  // Activity.
+  lastLoginAt DateTime?
+  lastLoginIp String?
+  loginCount  Int       @default(0)
+
+  // Which workspace this person belongs to. Nullable only so the column could
+  // be added to a live table; every row is adopted by the backfill in
+  // src/lib/tenancy.ts, and a signup always creates or joins one.
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  auditLogs AuditLog[]
+  syncJobs  SyncJob[]
+
+  @@index([pendingApproval])
+  @@index([organizationId])
+  @@map("users")
+}
+
+// ─── Client ──────────────────────────────────────────────────────────────────
+
+model Client {
+  id                 String       @id @default(cuid())
+  slug               String       @unique
+  name               String
+  timezone           String       @default("America/New_York")
+  status             ClientStatus @default(DRAFT)
+  clientType         ClientType   @default(CLIENT)
+  campaignStartDate  DateTime?
+  reportingStartDate DateTime?
+  internalOwner      String?
+  website            String?
+  logoUrl            String?
+  industry           String?
+  billingStatus      String?
+  contractStatus     String?
+  notes              String?
+  archivedAt         DateTime?
+  archiveReason      String?
+  streakBoxKey       String?      @unique
+  streakStageKey     String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  platformConnections PlatformConnection[]
+  postingSchedules    PostingSchedule[]
+  socialPosts         SocialPost[]
+  dailyCompliance     DailyCompliance[]
+  followerSnapshots   FollowerSnapshot[]
+  syncJobs            SyncJob[]
+  contentAnalyses     ContentAnalysis[]
+  postPrompts         PostPrompt[]
+
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("clients")
+}
+
+// ─── PlatformConnection ───────────────────────────────────────────────────────
+
+model PlatformConnection {
+  id                   String           @id @default(cuid())
+  clientId             String
+  platform             Platform
+  externalAccountId    String?
+  externalAccountName  String?
+  externalAccountUrl   String?
+  isMandatory          Boolean          @default(true)
+  isEnabled            Boolean          @default(true)
+  connectionStatus     ConnectionStatus @default(PENDING)
+  tokenReference       String?
+  tokenExpiresAt       DateTime?
+  enforcementStartDate DateTime?
+  enforcementEndDate   DateTime?
+  notes                String?
+  lastSyncAt           DateTime?
+  lastSyncError        String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  client            Client             @relation(fields: [clientId], references: [id])
+  postingSchedules  PostingSchedule[]
+  socialPosts       SocialPost[]
+  dailyCompliance   DailyCompliance[]
+  followerSnapshots FollowerSnapshot[]
+  organizationId    String?
+  organization      Organization?      @relation(fields: [organizationId], references: [id])
+
+  @@unique([clientId, platform])
+  @@index([organizationId])
+  @@map("platform_connections")
+}
+
+// ─── PostingSchedule ──────────────────────────────────────────────────────────
+
+model PostingSchedule {
+  id                   String      @id @default(cuid())
+  clientId             String
+  platformConnectionId String
+  mode                 PostingMode @default(WORKING_DAYS)
+  weekdaysJson         String?
+  useWorkingDays       Boolean     @default(true)
+  holidayCalendarJson  String?
+  exclusionDatesJson   String?
+  customTargetCount    Int?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  client             Client             @relation(fields: [clientId], references: [id])
+  platformConnection PlatformConnection @relation(fields: [platformConnectionId], references: [id])
+
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("posting_schedules")
+}
+
+// ─── SocialPost ───────────────────────────────────────────────────────────────
+
+model SocialPost {
+  id                   String   @id @default(cuid())
+  clientId             String
+  platformConnectionId String
+  platform             Platform
+  externalPostId       String
+  postUrl              String?
+  postTextSnippet      String?
+  postTextFull         String?  @db.Text
+  hashtags             String?
+  hasMedia             Boolean  @default(false)
+  publishedAtUtc       DateTime
+  publishedAtLocal     DateTime
+  publishedDateLocal   String
+  likeCount            Int      @default(0)
+  commentCount         Int      @default(0)
+  shareCount           Int      @default(0)
+  viewCount            Int      @default(0)
+  rawPayloadJson       String?  @db.Text
+  importedAt           DateTime @default(now())
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  client             Client             @relation(fields: [clientId], references: [id])
+  platformConnection PlatformConnection @relation(fields: [platformConnectionId], references: [id])
+  organizationId     String?
+  organization       Organization?      @relation(fields: [organizationId], references: [id])
+
+  @@unique([clientId, platform, externalPostId])
+  @@index([clientId, platform, publishedDateLocal])
+  @@index([organizationId])
+  @@map("social_posts")
+}
+
+// ─── DailyCompliance ──────────────────────────────────────────────────────────
+
+model DailyCompliance {
+  id                    String           @id @default(cuid())
+  clientId              String
+  platformConnectionId  String
+  platform              Platform
+  dateLocal             String
+  expectedFlag          Boolean          @default(false)
+  status                ComplianceStatus @default(GRAY)
+  verifiedPostCount     Int              @default(0)
+  primaryPostId         String?
+  primaryPostUrl        String?
+  verificationSource    String?
+  verificationErrorCode String?
+  verificationErrorMsg  String?
+  verifiedAt            DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  client             Client             @relation(fields: [clientId], references: [id])
+  platformConnection PlatformConnection @relation(fields: [platformConnectionId], references: [id])
+  organizationId     String?
+  organization       Organization?      @relation(fields: [organizationId], references: [id])
+
+  @@unique([clientId, platformConnectionId, dateLocal])
+  @@index([clientId, dateLocal])
+  @@index([platform, dateLocal])
+  @@index([organizationId])
+  @@map("daily_compliance")
+}
+
+// ─── FollowerSnapshot ────────────────────────────────────────────────────────
+
+model FollowerSnapshot {
+  id                   String   @id @default(cuid())
+  clientId             String
+  platformConnectionId String
+  platform             Platform
+  snapshotDateLocal    String
+  followerCount        Int
+  followingCount       Int?
+  extraMetricsJson     String?
+  collectedAt          DateTime @default(now())
+
+  client             Client             @relation(fields: [clientId], references: [id])
+  platformConnection PlatformConnection @relation(fields: [platformConnectionId], references: [id])
+  organizationId     String?
+  organization       Organization?      @relation(fields: [organizationId], references: [id])
+
+  @@unique([clientId, platformConnectionId, snapshotDateLocal])
+  @@index([clientId, platform])
+  @@index([organizationId])
+  @@map("follower_snapshots")
+}
+
+// ─── ContentAnalysis ─────────────────────────────────────────────────────────
+// Cached output of the Content Intelligence engine. One row per
+// (client, windowDays) so the 90d and 365d views can coexist. The heavy
+// AI call runs on demand; every read after that is a single indexed lookup.
+
+model ContentAnalysis {
+  id            String   @id @default(cuid())
+  clientId      String
+  windowDays    Int      @default(365)
+  postCount     Int      @default(0)
+  platformsJson String?
+  statsJson     String?  @db.Text
+  resultJson    String   @db.Text
+  model         String?
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+  durationMs    Int      @default(0)
+  generatedAt   DateTime @default(now())
+  generatedBy   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  client         Client        @relation(fields: [clientId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@unique([clientId, windowDays])
+  @@index([clientId, generatedAt])
+  @@index([organizationId])
+  @@map("content_analyses")
+}
+
+// ─── PostPrompt (Post Studio) ────────────────────────────────────────────────
+//
+// The generated writing brief for ONE company: a paste-ready prompt for future
+// posts plus a hashtag strategy, both derived from the content we already
+// collected. Cached per (clientId, windowDays) exactly like ContentAnalysis so
+// the expensive model call only runs when someone presses the button.
+// Campaign-only by product rule — the API refuses non-CAMPAIGN companies.
+
+model PostPrompt {
+  id           String   @id @default(cuid())
+  clientId     String
+  windowDays   Int      @default(365)
+  postCount    Int      @default(0)
+  promptText   String   @db.Text
+  resultJson   String   @db.Text
+  model        String?
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  durationMs   Int      @default(0)
+  generatedAt  DateTime @default(now())
+  generatedBy  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  client         Client        @relation(fields: [clientId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@unique([clientId, windowDays])
+  @@index([clientId, generatedAt])
+  @@index([organizationId])
+  @@map("post_prompts")
+}
+
+// ─── SyncJob ─────────────────────────────────────────────────────────────────
+
+model SyncJob {
+  id             String        @id @default(cuid())
+  jobType        SyncJobType
+  scopeType      SyncScopeType @default(ALL)
+  scopeId        String?
+  clientId       String?
+  triggeredById  String?
+  startedAt      DateTime      @default(now())
+  finishedAt     DateTime?
+  status         SyncStatus    @default(PENDING)
+  itemsProcessed Int           @default(0)
+  itemsSucceeded Int           @default(0)
+  itemsFailed    Int           @default(0)
+  errorLogJson   String?       @db.Text
+  resultsJson    String?       @db.Text
+  notes          String?
+  createdAt      DateTime      @default(now())
+
+  client         Client?       @relation(fields: [clientId], references: [id])
+  triggeredBy    User?         @relation(fields: [triggeredById], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([clientId, status])
+  @@index([jobType, startedAt])
+  @@index([organizationId])
+  @@map("sync_jobs")
+}
+
+// ─── AuditLog ─────────────────────────────────────────────────────────────────
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@map("settings")
+}
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  actorUserId String?
+  actionType  AuditAction
+  entityType  String
+  entityId    String
+  beforeJson  String?     @db.Text
+  afterJson   String?     @db.Text
+  ipAddress   String?
+  createdAt   DateTime    @default(now())
+
+  user           User?         @relation(fields: [actorUserId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorUserId])
+  @@index([createdAt])
+  @@index([organizationId])
+  @@map("audit_logs")
+}
+
+// ─── Publishing (v4.37.0 — replaces HeroPost + CloudCampaign review) ─────────
+//
+// ContentItem   one piece of content for one client, going to one or more
+//               networks at the same time (LinkedIn + X).
+//   DRAFT → IN_REVIEW (sent to the client) ⇄ CHANGES_REQUESTED → APPROVED
+//   → SCHEDULED → PUBLISHED | PARTIAL | FAILED
+//   Editing approved text sends it back to DRAFT: approved means "this exact
+//   wording". Statuses are plain strings so new states need no enum migration.
+// ContentComment the copywriter ↔ client thread on an item (and its history:
+//               submitted / changes requested / approved / edited).
+// ScheduledPost one delivery = one network for one item. Created when the item
+//               is scheduled; published by the Chrome extension from the
+//               signed-in browser; verified on the profile and by collection.
+//   SCHEDULED → POSTING → POSTED (verifiedAt) | FAILED | MISSED
+
+model ContentItem {
+  id             String    @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  clientId       String?
+  title          String?
+  text           String    @db.Text
+  /// Optional shorter X version; the main text is used when empty.
+  textX          String?   @db.Text
+  /// Comma list: "LINKEDIN,TWITTER".
+  platforms      String    @default("LINKEDIN,TWITTER")
+  status         String    @default("DRAFT")
+  scheduledAt    DateTime?
+  version        Int       @default(1)
+  submittedAt    DateTime?
+  approvedAt     DateTime?
+  approvedBy     String?
+  approvedRole   String?
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  comments   ContentComment[]
+  deliveries ScheduledPost[]
+  media      ContentMedia[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, clientId])
+  @@index([organizationId, scheduledAt])
+  @@map("content_items")
+}
+
+model ContentComment {
+  id             String      @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  contentId      String
+  content        ContentItem @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  authorName     String?
+  /// "team" | "client"
+  authorRole     String      @default("team")
+  /// "comment" | "submitted" | "changes_requested" | "approved" | "edited" | "scheduled" | "published"
+  kind           String      @default("comment")
+  body           String?     @db.Text
+  version        Int         @default(1)
+  createdAt      DateTime    @default(now())
+
+  @@index([contentId, createdAt])
+  @@index([organizationId])
+  @@map("content_comments")
+}
+
+model ScheduledPost {
+  id             String    @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  contentId      String?
+  content        ContentItem? @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  clientId       String?
+  /// "TWITTER" | "LINKEDIN"
+  platform       String
+  /// X: @handle without "@". LinkedIn: the company page or profile URL to post as.
+  target         String?
+  text           String    @db.Text
+  /// Pictures snapshotted at scheduling time: [{ url, mime, name }].
+  mediaJson      String?   @db.Text
+  status         String    @default("SCHEDULED")
+  scheduledAt    DateTime
+  claimedAt      DateTime?
+  attempts       Int       @default(0)
+  postedAt       DateTime?
+  postUrl        String?
+  externalPostId String?
+  verifiedAt     DateTime?
+  verifiedVia    String?
+  lastError      String?
+  alertedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([organizationId, status])
+  @@index([organizationId, scheduledAt])
+  @@index([contentId])
+  @@map("scheduled_posts")
+}
+
+// The picture of a ContentItem (v4.38.0; one per post since v4.38.1). Resized in the browser to
+// JPEG ≤ 2048 px before upload and kept in the database (base64), so there is
+// no extra storage service to run. Served by /api/media/<id>?k=<key>; the
+// random key is what makes the URL unguessable (the extension and the client
+// review page load pictures through it).
+model ContentMedia {
+  id             String      @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  contentId      String
+  content        ContentItem @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  key            String
+  position       Int         @default(0)
+  mime           String      @default("image/jpeg")
+  name           String?
+  width          Int?
+  height         Int?
+  sizeBytes      Int         @default(0)
+  dataB64        String      @db.Text
+  createdAt      DateTime    @default(now())
+
+  @@index([contentId, position])
+  @@index([organizationId])
+  @@map("content_media")
+}

@@ -2,7 +2,7 @@
 export const PRODUCT_NAME = "Publish";
 export const PRODUCT_HOME = "/publishing";
 export const PRODUCT_TAGLINE = "Create, approve, schedule and publish";
-export const PRODUCT_VERSION = "0.2.1";
+export const PRODUCT_VERSION = "0.3.0";
 
 /** Sign-in page copy (v0.2.1: was still Social's copy). */
 export const PRODUCT_LOGIN_HEADLINE = "Create, approve and publish every campaign post.";

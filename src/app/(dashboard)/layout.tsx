@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { ViewFiltersProvider } from "@/lib/view-filters";
+import { SelectedClientProvider } from "@/lib/selected-client";
 import { ApiRetry } from "@/components/layout/api-retry";
 import { PRODUCT_NAME, PRODUCT_VERSION } from "@/lib/product";
 
@@ -35,6 +36,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const shortSha = APP_VERSION.length > 8 ? APP_VERSION.slice(0, 7) : APP_VERSION;
   return (
     <ViewFiltersProvider>
+      <SelectedClientProvider>
       <ApiRetry />
       <div className="flex h-screen overflow-hidden bg-[#F5F4F0]">
         <Sidebar />
@@ -48,6 +50,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </div>
         </main>
       </div>
+      </SelectedClientProvider>
     </ViewFiltersProvider>
   );
 }

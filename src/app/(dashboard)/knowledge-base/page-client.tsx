@@ -9,6 +9,7 @@
  * Autopilot reads all three before writing a post.
  */
 
+import { useSelectedClient } from "@/lib/selected-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/layout/header";
@@ -42,6 +43,8 @@ export function KnowledgeBaseClient() {
   const [companies, setCompanies] = useState<Company[] | null>(null);
   const [canWrite, setCanWrite] = useState(false);
   const [open, setOpen] = useState<string>("");
+  // v0.3.0: follows the client picked in the left-menu client list.
+  const { clientId: menuClient, setClientId: setMenuClient } = useSelectedClient();
   const [view, setView] = useState<View>("valueProp");
   const [kb, setKb] = useState<KB | null>(null);
   const [snap, setSnap] = useState<Snapshot>(null);
@@ -86,11 +89,16 @@ export function KnowledgeBaseClient() {
     }
   }, []);
   useEffect(() => { void loadKb(open); }, [open, loadKb]);
+  useEffect(() => {
+    if (menuClient && menuClient !== open && companies?.some((c) => c.id === menuClient)) pick(menuClient);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuClient, companies]);
 
   // v4.59.0 audit: switching company drops unsaved edits — ask first.
   function pick(id: string) {
     if (id === open) { setView("valueProp"); return; }
     if (dirty && !confirm("Discard unsaved edits?")) return;
+    if (id !== menuClient) setMenuClient(id);
     setOpen(id); setView("valueProp");
   }
 

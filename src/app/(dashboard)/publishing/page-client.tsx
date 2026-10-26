@@ -10,6 +10,7 @@
  * from the browser signed in to them. Each column is one step.
  */
 
+import { useSelectedClient } from "@/lib/selected-client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
@@ -45,7 +46,8 @@ const PER_GROUP = 5;
 export function PublishingContentClient() {
   const [feed, setFeed] = useState<Feed | null>(null);
   const [loading, setLoading] = useState(true);
-  const [clientFilter, setClientFilter] = useState("");
+  // v0.3.0: the client comes from the left-menu client list.
+  const { clientId: clientFilter, setClientId: setClientFilter } = useSelectedClient();
   const [openId, setOpenId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [batching, setBatching] = useState(false);

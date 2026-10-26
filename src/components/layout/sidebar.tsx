@@ -32,6 +32,8 @@ import {
   BookOpen, CalendarDays, Link2, Bot} from "lucide-react";
 import { useDemoMode, setDemoMode } from "@/lib/use-demo-mode";
 import { FilterPanel } from "./filter-panel";
+import { ClientList } from "./client-list";
+import { useSelectedClient } from "@/lib/selected-client";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -86,6 +88,8 @@ function initials(name?: string | null, email?: string | null): string {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { clientId } = useSelectedClient();
+  const withClient = (href: string) => (clientId ? `${href}?client=${clientId}` : href);
   const { data: session } = useSession();
   const role = (session?.user as { role?: string } | undefined)?.role?.toLowerCase() ?? "user";
   const setupIncomplete = false;
@@ -123,7 +127,7 @@ export function Sidebar() {
               return (
                 <div key={item.href}>
                   <Link
-                    href={item.href}
+                    href={withClient(item.href)}
                     className={cn(
                       "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors",
                       isActive
@@ -160,6 +164,9 @@ export function Sidebar() {
             })}
           </div>
         ))}
+
+        {/* Every client, CloudCampaign-style (v0.3.0). */}
+        <ClientList />
 
         {/* View filters — category / month / network, applied across the
             dashboard views. Hidden on pages the filters don't drive. */}

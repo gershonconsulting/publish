@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
+import { useSelectedClient } from "@/lib/selected-client";
 import { Check, ChevronDown, ChevronRight, Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { NetChip } from "@/components/publishing/shared";
 import { LinkedAccountsCard } from "@/components/settings/linked-accounts-card";
@@ -59,7 +60,10 @@ type Row = {
 };
 
 export function PublishingAccountsClient() {
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [allRows, setRows] = useState<Row[] | null>(null);
+  // v0.3.0: narrowed to the client picked in the left-menu client list.
+  const { clientId } = useSelectedClient();
+  const rows = allRows && clientId ? allRows.filter((r) => r.id === clientId) : allRows;
   const [browsers, setBrowsers] = useState<BrowserRow[]>([]);
   const [canWrite, setCanWrite] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -105,7 +109,7 @@ export function PublishingAccountsClient() {
       {!rows ? (
         !err && <div className="text-sm text-gray-500 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Loading…</div>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-gray-500">No campaign or internal companies yet.</p>
+        <p className="text-sm text-gray-500">{clientId ? "This client is not set up for publishing yet." : "No campaign or internal companies yet."}</p>
       ) : (
         <div className="space-y-2">
           {rows.map((r) => <AccountRow key={r.id} r={r} canWrite={canWrite} onSaved={(n) => setRows((all) => (all || []).map((x) => (x.id === n.id ? n : x)))} />)}

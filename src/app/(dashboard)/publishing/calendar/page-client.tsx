@@ -8,6 +8,7 @@
  * every load (lib/publishing.ts → sweep).
  */
 
+import { useSelectedClient } from "@/lib/selected-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
@@ -28,7 +29,8 @@ export function PublishingCalendarClient() {
   const [feed, setFeed] = useState<Feed | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(dayKey(new Date()));
-  const [clientFilter, setClientFilter] = useState("");
+  // v0.3.0: the client comes from the left-menu client list.
+  const { clientId: clientFilter, setClientId: setClientFilter } = useSelectedClient();
   const [openId, setOpenId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const monthRef = useRef(month.getTime());

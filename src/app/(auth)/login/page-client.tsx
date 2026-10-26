@@ -12,12 +12,9 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Check, Download, Loader2 } from "lucide-react";
 import { EXTENSION_ZIP_URL, EXTENSION_ZIP_NAME } from "@/lib/extension-version";
+import { PRODUCT_LOGIN_HEADLINE, PRODUCT_LOGIN_SUBLINE, PRODUCT_LOGIN_POINTS } from "@/lib/product";
 
-const POINTS = [
-  "Daily collection from LinkedIn and X",
-  "Alerts when a company goes silent",
-  "Monthly reports you can share with a link",
-];
+const POINTS: readonly string[] = PRODUCT_LOGIN_POINTS;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -64,10 +61,10 @@ export default function LoginPage() {
         </div>
         <div className="max-w-[520px] space-y-5">
           <h1 className="text-[44px] leading-[1.1] font-semibold tracking-tight">
-            See what every company you follow is publishing.
+            {PRODUCT_LOGIN_HEADLINE}
           </h1>
           <p className="text-[17px] leading-relaxed text-[#B4B9C2]">
-            LinkedIn and X activity for your clients, partners and competitors, collected daily and in one place.
+            {PRODUCT_LOGIN_SUBLINE}
           </p>
           <ul className="space-y-3 pt-2">
             {POINTS.map((p) => (

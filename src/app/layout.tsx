@@ -2,11 +2,12 @@ export const runtime = 'edge';
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { PRODUCT_NAME, PRODUCT_DESCRIPTION } from "@/lib/product";
 
 export const metadata: Metadata = {
-  title: "Social by Gershon.AI",
-  applicationName: "Social by Gershon.AI",
-  description: "Social Media Campaign Compliance & Reporting — Gershon Consulting",
+  title: `${PRODUCT_NAME} by Gershon.AI`,
+  applicationName: `${PRODUCT_NAME} by Gershon.AI`,
+  description: PRODUCT_DESCRIPTION,
 };
 
 export default function RootLayout({

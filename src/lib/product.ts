@@ -2,7 +2,13 @@
 export const PRODUCT_NAME = "Publish";
 export const PRODUCT_HOME = "/publishing";
 export const PRODUCT_TAGLINE = "Create, approve, schedule and publish";
-export const PRODUCT_VERSION = "0.2.0";
+export const PRODUCT_VERSION = "0.2.1";
+
+/** Sign-in page copy (v0.2.1: was still Social's copy). */
+export const PRODUCT_LOGIN_HEADLINE = "Create, approve and publish every campaign post.";
+export const PRODUCT_LOGIN_SUBLINE = "Content, client review, scheduling and Autopilot for our campaign and internal companies, on LinkedIn and X.";
+export const PRODUCT_LOGIN_POINTS = ["Client review before anything goes out", "Calendar and scheduled publishing on LinkedIn and X", "Autopilot drafts from each company's Knowledge Base"];
+export const PRODUCT_DESCRIPTION = "Publish by Gershon.AI \u2014 create, approve, schedule and publish (internal)";
 
 /**
  * Company categories this product serves (Olivier, 2026-10-26): Publish and

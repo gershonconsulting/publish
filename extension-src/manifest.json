@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Publish by Gershon.AI — LinkedIn & X Publisher",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Publishes the approved, scheduled posts of publish.gershon.ai on the company LinkedIn pages and X accounts, from this browser, at their scheduled time. Collects nothing. Does nothing until someone signs in to publish.gershon.ai in this browser.",
   "permissions": [
     "cookies",

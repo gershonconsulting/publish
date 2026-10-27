@@ -11,9 +11,9 @@ export const runtime = "edge";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db-raw";
 import { SITE, getTarget, saveTarget, PUBLISHING_CLIENT_WHERE } from "@/lib/publishing";
-import { getLinked, linkedinConnect, liAuthorUrl, pickAuthor, saveLinked, takeState, xConnect, type LiConn } from "@/lib/linked-accounts";
+import { getLinked, linkedinConnect, liAuthorUrl, pickAuthor, saveLinked, saveOrgNames, takeState, withNames, getOrgNames, xConnect, type LiConn } from "@/lib/linked-accounts";
 
-const done = (q: string) => NextResponse.redirect(`${SITE}/publishing/accounts?${q}#linked`);
+const done = (q: string) => NextResponse.redirect(`${SITE}/publishing/accounts?${q}#pages`);
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ net: string }> }) {
   const { net } = await ctx.params;
@@ -34,7 +34,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ net: string
     }
 
     const first = await getLinked(st.orgId, st.clientId);
-    const conn = await linkedinConnect(code, st.by, first.linkedin);
+    const conn0 = await linkedinConnect(code, st.by, first.linkedin);
+    // v0.7.2: remember page names; fill the ones LinkedIn did not give from names learned before
+    // (API or the Publish extension), so pickAuthor can match companies by name.
+    const at = new Date().toISOString();
+    const learned: Record<string, { name: string; vanity: string | null; at: string; source: "api" }> = {};
+    for (const p of conn0.authors) if (p.kind === "organization" && !/^Page \d+$/.test(p.name)) learned[p.id] = { name: p.name, vanity: p.vanity, at, source: "api" };
+    await saveOrgNames(st.orgId, learned).catch(() => null);
+    const conn: LiConn = { ...conn0, authors: withNames(conn0.authors, await getOrgNames(st.orgId).catch(() => ({}))) };
     const clients = await prisma.client.findMany({
       where: { organizationId: st.orgId, archivedAt: null, status: { not: "ARCHIVED" }, ...PUBLISHING_CLIENT_WHERE },
       select: { id: true, name: true },

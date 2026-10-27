@@ -34,8 +34,21 @@ async function picture(contentId: string | null): Promise<{ bytes: Uint8Array<Ar
 }
 
 /** Does this delivery go through a Linked Account? (used by the extension's /due to leave it alone) */
+/**
+ * v0.7.0 RULE (Olivier, 2026-10-27): LinkedIn posts go out from the page
+ * admin's own account through the Publish Chrome extension. The LinkedIn API
+ * connection only lists the pages he administers (Connections → Your LinkedIn
+ * pages). Server-side LinkedIn posting stays available but OFF unless the
+ * workspace setting "publish_linkedin_via" is "api".
+ */
+async function linkedinViaApi(orgId: string): Promise<boolean> {
+  const row = await prisma.orgSetting.findUnique({ where: { organizationId_key: { organizationId: orgId, key: "publish_linkedin_via" } } }).catch(() => null);
+  return row?.value === "api";
+}
+
 export async function apiRouted(orgId: string, d: { clientId: string | null; platform: string; target: string | null }, cache?: Map<string, Linked>): Promise<boolean> {
   if (!d.clientId) return false;
+  if (d.platform === "LINKEDIN" && !(await linkedinViaApi(orgId))) return false;
   let l = cache?.get(d.clientId);
   if (!l) {
     l = await getLinked(orgId, d.clientId);

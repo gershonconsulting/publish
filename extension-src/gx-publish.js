@@ -165,6 +165,37 @@
     return "Publish ext · Chrome" + (os ? " on " + os : "") + (n ? " (" + n + ")" : "");
   }
 
+  // ── Page names (0.2.0) ───────────────────────────────────────────────────
+  // publish.gershon.ai lists the pages the admin's LinkedIn account manages.
+  // When LinkedIn's API gives an id without a name, this Chrome — signed in as
+  // that admin — reads the name (and whether it is an admin) from LinkedIn
+  // and sends it with the next check-in. Read-only; nothing is posted.
+  async function resolveOrgNames(ids) {
+    var js = await cookie(["https://www.linkedin.com/"], "JSESSIONID");
+    if (!js || !ids || !ids.length) return [];
+    var out = [];
+    for (var i = 0; i < ids.length && i < 15; i++) {
+      var id = String(ids[i]);
+      if (!/^\d{1,15}$/.test(id)) continue;
+      try {
+        var r = await fetch("https://www.linkedin.com/voyager/api/organization/companies/" + id, {
+          credentials: "include",
+          headers: { "csrf-token": js.replace(/"/g, ""), "x-restli-protocol-version": "2.0.0", accept: "application/json" }
+        });
+        if (!r.ok) continue;
+        var t = await r.text();
+        var j = null; try { j = JSON.parse(t); } catch (e) {}
+        var name = j && (j.name || (j.data && j.data.name));
+        var vanity = j && (j.universalName || (j.data && j.data.universalName));
+        if (!name) { var m = t.match(/"name":"([^"]{1,120})"/); name = m ? m[1] : null; }
+        if (!vanity) { var v = t.match(/"universalName":"([^"]{1,100})"/); vanity = v ? v[1] : null; }
+        if (name) out.push({ id: id, name: name, vanity: vanity || null, admin: /"(?:Super admin|ADMINISTRATOR|Content admin)"/i.test(t) });
+      } catch (e) {}
+      await new Promise(function (res) { setTimeout(res, 400); });
+    }
+    return out;
+  }
+
   async function heartbeat(extra) {
     if (!(await bound())) return null;
     var xIn = await xSignedIn();
@@ -182,7 +213,8 @@
           linkedin: { signedIn: liIn, name: liIn ? await liName() : null },
           version: version(),
           browser: { id: await browserId(), label: await browserLabel() },
-          probes: probes
+          probes: probes,
+          orgNames: st0.pendingOrgNames || []
         }, extra || {}))
       });
       var j = await r.json().catch(function () { return null; });
@@ -191,7 +223,8 @@
         patch.voiceX = (j.data.voice && j.data.voice.x) || null;
         patch.enabled = j.data.enabled !== false;
         patch.checkLinkedIn = Array.isArray(j.data.checkLinkedIn) ? j.data.checkLinkedIn.slice(0, 4) : [];
-        if (r.ok) patch.pendingProbes = [];
+        if (r.ok) { patch.pendingProbes = []; patch.pendingOrgNames = []; }
+        patch.resolveOrgs = Array.isArray(j.data.resolveOrgs) ? j.data.resolveOrgs.slice(0, 15) : [];
       }
       await setState(patch);
       return j && j.data;
@@ -868,6 +901,11 @@
     // Pages the dashboard asked this Chrome to check (after posting, never before).
     s = await getState();
     if (s.checkLinkedIn && s.checkLinkedIn.length) await probeLinkedIn(s.checkLinkedIn);
+    if (s.resolveOrgs && s.resolveOrgs.length && !(s.pendingOrgNames && s.pendingOrgNames.length)) {
+      var got = await resolveOrgNames(s.resolveOrgs);
+      await setState({ resolveOrgs: [], pendingOrgNames: got });
+      if (got.length) await heartbeat();
+    }
   }
 
   // ── Wiring (top level, so the service worker re-registers on wake) ──────

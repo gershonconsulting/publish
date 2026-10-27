@@ -9,7 +9,7 @@ import { publishingCaller } from "@/lib/publishing-auth";
 import { PUBLISHING_CLIENT_WHERE, SITE } from "@/lib/publishing";
 import { appReady, getAppCreds, linkedinAuthorizeUrl, newState, xAuthorizeUrl, type LinkNet } from "@/lib/linked-accounts";
 
-const back = (msg: string) => NextResponse.redirect(`${SITE}/publishing/accounts?linked_error=${encodeURIComponent(msg)}#linked`);
+const back = (msg: string) => NextResponse.redirect(`${SITE}/publishing/accounts?linked_error=${encodeURIComponent(msg)}#pages`);
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ net: string }> }) {
   const c = await publishingCaller(true);

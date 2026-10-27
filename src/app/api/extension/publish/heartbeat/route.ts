@@ -17,9 +17,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { refusedStatus, resolvePublishExtensionCaller } from "@/lib/publish-extension-caller";
 import prisma from "@/lib/db-raw";
 import { clientRoutedIds, destinationsOf, getPublisherState, getSettings, getTarget, normalizeHandle, savePublisherState, sweep, PUBLISHING_CLIENT_WHERE, type NetSession } from "@/lib/publishing";
+import { saveOrgNames } from "@/lib/linked-accounts";
+import { unnamedPageIds } from "@/lib/my-pages";
 import { getBrowser, LI_CHECK_TTL_MS, LI_FAIL_TTL_MS, liKey, saveBrowser, validBrowserId, xKey, type PublishBrowser } from "@/lib/publish-browsers";
 
 type Probe = { target?: string; ok?: boolean; why?: string | null };
+/** v0.7.0 (extension 0.2.0): page names the extension read from LinkedIn for ids the API could not name. */
+type OrgNameIn = { id?: string; name?: string; vanity?: string | null; admin?: boolean };
 type BrowserIn = { id?: string; label?: string } | undefined;
 
 /** Every LinkedIn page/group this caller may publish to. */
@@ -65,7 +69,7 @@ async function registerBrowser(
     lastError: prev?.lastError ?? null,
   };
   if (br.x.as && !br.x.accounts.includes(br.x.as)) br.x.accounts.unshift(br.x.as);
-  for (const p of Array.isArray(b?.probes) ? b!.probes!.slice(0, 20) : []) {
+  for (const p of Array.isArray(b?.probes) ? b!.probes!.slice(0, 80) : []) {
     const k = liKey(p.target);
     if (k) br.li[k] = { ok: !!p.ok, at: now.toISOString(), why: p.ok ? null : (p.why || "not an admin").slice(0, 120) };
   }
@@ -104,6 +108,7 @@ export async function POST(req: NextRequest) {
     }
     const b = (await req.json().catch(() => null)) as {
       x?: In & { accounts?: string[] }; linkedin?: In & { name?: string | null }; version?: string; error?: string | null; browser?: BrowserIn; probes?: Probe[];
+      orgNames?: OrgNameIn[];
     } | null;
     const now = new Date().toISOString();
     const st = await getPublisherState(caller.orgId, caller.clientId);
@@ -114,7 +119,20 @@ export async function POST(req: NextRequest) {
     if (b?.error !== undefined) st.lastError = b.error;
     await savePublisherState(caller.orgId, st, caller.clientId);
     await sweep(caller.orgId).catch(() => null);
-    const checkLinkedIn = await registerBrowser(caller.orgId, caller.clientId, b?.browser, b).catch(() => [] as string[]);
+    // v0.7.0: names for "Page 123" entries, read by the extension in the admin's own LinkedIn session.
+    const named = (Array.isArray(b?.orgNames) ? b!.orgNames! : []).slice(0, 30)
+      .filter((o) => /^\d{1,15}$/.test(String(o.id || "")) && typeof o.name === "string" && o.name.trim());
+    const probesIn: Probe[] = [...(Array.isArray(b?.probes) ? b!.probes! : [])];
+    if (named.length && !caller.clientId) {
+      const at = new Date().toISOString();
+      await saveOrgNames(caller.orgId, Object.fromEntries(named.map((o) => [String(o.id), { name: o.name!.trim().slice(0, 120), vanity: o.vanity ? String(o.vanity).slice(0, 100) : null, at, source: "extension" as const }]))).catch(() => null);
+      for (const o of named) if (o.admin) {
+        probesIn.push({ target: `https://www.linkedin.com/company/${o.id}/`, ok: true });
+        if (o.vanity) probesIn.push({ target: `https://www.linkedin.com/company/${o.vanity}/`, ok: true });
+      }
+    }
+    const checkLinkedIn = await registerBrowser(caller.orgId, caller.clientId, b?.browser, b ? { ...b, probes: probesIn } : b).catch(() => [] as string[]);
+    const resolveOrgs = caller.clientId ? [] : (await unnamedPageIds(caller.orgId).catch(() => [] as string[])).slice(0, 15);
 
     const settings = await getSettings(caller.orgId);
     const u = await prisma.user.findFirst({
@@ -130,6 +148,7 @@ export async function POST(req: NextRequest) {
       data: {
         enabled: settings.enabled,
         checkLinkedIn,
+        resolveOrgs,
         voice: {
           x: caller.clientId ? "X signed you out. Please sign back in so your scheduled posts can go out." : `${lead}I need you now. Project: Publish. Task: X signed you out. Please sign back in so scheduled posts can go out.`,
           linkedin: caller.clientId ? "LinkedIn signed you out. Please sign back in so your scheduled posts can go out." : `${lead}I need you now. Project: Publish. Task: LinkedIn signed you out. Please sign back in so scheduled posts can go out.`,

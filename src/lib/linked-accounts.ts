@@ -39,6 +39,8 @@ export type LiConn = {
   /** The page or profile posts go out as. */
   author: string | null;
   lastError: string | null;
+  /** v0.7.0: why some page names are missing (null when all are known). */
+  namesStatus?: string | null;
 };
 export type XConn = {
   accessToken: string;
@@ -191,30 +193,109 @@ async function liToken(body: Record<string, string>): Promise<{ access_token: st
   return j as never;
 }
 
+/** Page names LinkedIn gave back: id → { name, vanity }. */
+type OrgInfo = { name: string; vanity: string | null };
+
+/**
+ * v0.7.0: names for page ids, cheapest first — one batch call
+ * (organizations?ids=List(…)), then organizationsLookup (works with fewer
+ * permissions), then one call per page (capped). Before this, a failing
+ * per-page call silently left "Page 81513174" in the list.
+ * `status` says why names are missing (shown on Connections).
+ */
+export async function resolveOrgNames(token: string, ids: string[]): Promise<{ names: Record<string, OrgInfo>; status: string | null }> {
+  const names: Record<string, OrgInfo> = {};
+  let status: string | null = null;
+  const want = () => ids.filter((id) => !names[id]);
+  const take = (j: unknown) => {
+    const res = (j as { results?: Record<string, { localizedName?: string; vanityName?: string; name?: { localized?: Record<string, string> } }> })?.results || {};
+    for (const [k, v] of Object.entries(res)) {
+      const id = k.split(":").pop() as string;
+      const n = v?.localizedName || (v?.name?.localized ? Object.values(v.name.localized)[0] : "");
+      if (n) names[id] = { name: n, vanity: v?.vanityName || null };
+    }
+  };
+  for (const path of ["organizations", "organizationsLookup"]) {
+    const ids0 = want();
+    if (!ids0.length) break;
+    for (let i = 0; i < ids0.length; i += 40) {
+      const r = await liFetch(token, `${path}?ids=List(${ids0.slice(i, i + 40).join(",")})`).catch(() => null);
+      if (r?.ok) take(await r.json().catch(() => null));
+      else status = `${path} ${r ? r.status : "network error"}${r ? `: ${((await r.json().catch(() => ({}))) as { message?: string }).message || ""}` : ""}`.trim();
+    }
+  }
+  for (const id of want().slice(0, 8)) {
+    const o = await liFetch(token, `organizations/${id}`).catch(() => null);
+    if (o?.ok) {
+      const oj = (await o.json().catch(() => ({}))) as { localizedName?: string; vanityName?: string };
+      if (oj.localizedName) names[id] = { name: oj.localizedName, vanity: oj.vanityName || null };
+    } else if (o) status = `organizations/{id} ${o.status}`;
+  }
+  return { names, status: want().length ? status || "LinkedIn returned no names" : null };
+}
+
 /** Pages the member administers, plus their own profile. */
-async function liAuthors(token: string): Promise<{ memberUrn: string | null; authors: LiAuthor[] }> {
+async function liAuthors(token: string): Promise<{ memberUrn: string | null; authors: LiAuthor[]; namesStatus: string | null }> {
   const authors: LiAuthor[] = [];
   let memberUrn: string | null = null;
-  const r = await liFetch(token, "organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED&count=50");
+  // Decorated first: the names come with the list in one call.
+  let r = await liFetch(token, "organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED&count=100&projection=(elements*(*,organization~(localizedName,vanityName)))");
+  if (!r.ok) r = await liFetch(token, "organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED&count=100");
   if (r.ok) {
-    const j = (await r.json()) as { elements?: { organization?: string; organizationTarget?: string; roleAssignee?: string }[] };
+    const j = (await r.json()) as { elements?: { organization?: string; organizationTarget?: string; roleAssignee?: string; "organization~"?: { localizedName?: string; vanityName?: string } }[] };
     for (const e of j.elements || []) {
       memberUrn = memberUrn || e.roleAssignee || null;
       const urn = e.organization || e.organizationTarget;
       if (!urn) continue;
       const id = urn.split(":").pop() as string;
-      let name = `Page ${id}`, vanity: string | null = null;
-      const o = await liFetch(token, `organizations/${id}`);
-      if (o.ok) {
-        const oj = (await o.json()) as { localizedName?: string; vanityName?: string };
-        name = oj.localizedName || name;
-        vanity = oj.vanityName || null;
-      }
-      authors.push({ urn, name, kind: "organization", vanity, id });
+      if (authors.some((a) => a.id === id)) continue;
+      const d = e["organization~"];
+      authors.push({ urn, name: d?.localizedName || `Page ${id}`, kind: "organization", vanity: d?.vanityName || null, id });
     }
   }
+  const missing = authors.filter((a) => /^Page \d+$/.test(a.name)).map((a) => a.id);
+  let namesStatus: string | null = null;
+  if (missing.length) {
+    const got = await resolveOrgNames(token, missing);
+    namesStatus = got.status;
+    for (const a of authors) if (got.names[a.id]) { a.name = got.names[a.id].name; a.vanity = got.names[a.id].vanity; }
+  }
+  authors.sort((a, b) => (/^Page \d+$/.test(a.name) ? 1 : 0) - (/^Page \d+$/.test(b.name) ? 1 : 0) || a.name.localeCompare(b.name));
   if (memberUrn) authors.push({ urn: memberUrn, name: "Personal profile", kind: "person", vanity: null, id: memberUrn.split(":").pop() as string });
-  return { memberUrn, authors };
+  return { memberUrn, authors, namesStatus };
+}
+
+/** Re-read the page list of an existing connection (no new LinkedIn login). */
+export async function liRefreshAuthors(c: LiConn): Promise<LiConn> {
+  const { token, updated } = await linkedinToken(c);
+  const base = updated || c;
+  const { memberUrn, authors, namesStatus } = await liAuthors(token);
+  if (!authors.length) return { ...base, namesStatus: namesStatus || "LinkedIn returned no pages" };
+  return { ...base, memberUrn: memberUrn || base.memberUrn, authors, namesStatus, author: base.author };
+}
+
+// ── Page names learned elsewhere (the Publish extension, v0.7.0) ────────────
+
+const ORG_NAMES_KEY = "li_org_names";
+export type OrgName = { name: string; vanity: string | null; at: string; source: "api" | "extension" };
+
+export async function getOrgNames(orgId: string): Promise<Record<string, OrgName>> {
+  const row = await prisma.orgSetting.findUnique({ where: { organizationId_key: { organizationId: orgId, key: ORG_NAMES_KEY } } });
+  try { return row?.value ? (JSON.parse(row.value) as Record<string, OrgName>) : {}; } catch { return {}; }
+}
+export async function saveOrgNames(orgId: string, add: Record<string, OrgName>): Promise<void> {
+  if (!Object.keys(add).length) return;
+  const cur = await getOrgNames(orgId);
+  const value = JSON.stringify({ ...cur, ...add });
+  await prisma.orgSetting.upsert({
+    where: { organizationId_key: { organizationId: orgId, key: ORG_NAMES_KEY } },
+    create: { organizationId: orgId, key: ORG_NAMES_KEY, value },
+    update: { value },
+  });
+}
+/** Fill "Page 123" names from the learned names. */
+export function withNames(authors: LiAuthor[], names: Record<string, OrgName>): LiAuthor[] {
+  return authors.map((a) => (a.kind === "organization" && /^Page \d+$/.test(a.name) && names[a.id] ? { ...a, name: names[a.id].name, vanity: a.vanity || names[a.id].vanity } : a));
 }
 
 export async function linkedinConnect(code: string, by: string | null, prev: LiConn | null | undefined): Promise<LiConn> {
@@ -222,7 +303,7 @@ export async function linkedinConnect(code: string, by: string | null, prev: LiC
   if (!appReady("linkedin", app)) throw new Error("The LinkedIn publishing app's Client Secret is not set (Settings → Linked accounts → Publishing apps).");
   const t = await liToken({ grant_type: "authorization_code", code, redirect_uri: redirectUri("linkedin"), client_id: app.clientId!, client_secret: app.clientSecret! });
   const now = Date.now();
-  const { memberUrn, authors } = await liAuthors(t.access_token);
+  const { memberUrn, authors, namesStatus } = await liAuthors(t.access_token);
   const keep = prev?.author && authors.some((a) => a.urn === prev.author) ? prev.author : null;
   return {
     accessToken: t.access_token,
@@ -233,8 +314,10 @@ export async function linkedinConnect(code: string, by: string | null, prev: LiC
     connectedBy: by,
     connectedAt: new Date(now).toISOString(),
     authors,
-    author: keep || authors.find((a) => a.kind === "organization")?.urn || authors[0]?.urn || null,
+    // v0.7.0: no guessing — a page is linked to a company on Connections → "Your LinkedIn pages".
+    author: keep,
     lastError: null,
+    namesStatus,
   };
 }
 

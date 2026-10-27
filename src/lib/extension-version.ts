@@ -14,7 +14,7 @@
  */
 import { PRODUCT_VERSION } from "@/lib/product";
 
-export const EXTENSION_LATEST = "0.1.0";
+export const EXTENSION_LATEST = "0.2.0";
 
 export const EXTENSION_NAME = "Publish by Gershon.AI — LinkedIn & X Publisher";
 

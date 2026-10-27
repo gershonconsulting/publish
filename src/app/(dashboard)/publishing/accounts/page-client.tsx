@@ -17,6 +17,7 @@ import { useSelectedClient } from "@/lib/selected-client";
 import { Check, ChevronDown, ChevronRight, Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { NetChip } from "@/components/publishing/shared";
 import { LinkedAccountsCard } from "@/components/settings/linked-accounts-card";
+import { MyLinkedInPages } from "@/components/publishing/my-linkedin-pages";
 import { EXTENSION_LATEST, PUBLISH_BROWSER_ID_PREFIX } from "@/lib/extension-version";
 
 type Conn = { platform: "LINKEDIN" | "TWITTER"; target: string; level: "ok" | "checking" | "missing" | "offline"; browsers: string[]; message: string };
@@ -73,9 +74,12 @@ export function PublishingAccountsClient() {
   useEffect(() => {
     try {
       const sp = new URLSearchParams(window.location.search);
-      if (sp.get("linked") || sp.get("linked_error")) {
+      // v0.7.2: LinkedIn comes back to "Your LinkedIn pages"; X still opens the API section.
+      if (sp.get("linked") === "x") {
         setShowApi(true);
         setTimeout(() => document.getElementById("linked")?.scrollIntoView({ block: "start" }), 600);
+      } else if (sp.get("linked") || sp.get("linked_error")) {
+        setTimeout(() => document.getElementById("pages")?.scrollIntoView({ block: "start" }), 600);
       }
     } catch {}
   }, []);
@@ -108,6 +112,8 @@ export function PublishingAccountsClient() {
       />
       {err && <div className="text-sm rounded-lg px-3 py-2 mb-4 bg-red-50 text-red-800">{err}</div>}
 
+      <MyLinkedInPages onChanged={() => void load()} />
+
       <PublishingChromes browsers={browsers} />
 
       {rows && conns.length > 0 && (
@@ -129,7 +135,7 @@ export function PublishingAccountsClient() {
 
       <div className="mt-8 border-t border-gray-200 pt-4">
         <button onClick={() => setShowApi((v) => !v)} className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
-          {showApi ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Advanced — publish through LinkedIn's and X's official APIs instead (optional, not needed)
+          {showApi ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Advanced — per-company API connections (optional; LinkedIn posts still go out through the extension)
         </button>
         {showApi && <div className="mt-3"><LinkedAccountsCard /></div>}
       </div>

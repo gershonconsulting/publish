@@ -41,6 +41,7 @@ import { publishLink } from "@/lib/publishing-mail";
 import { submitForReview } from "@/lib/publishing-review";
 import { aboutOf } from "@/lib/reports/ops/intelligence";
 import { clean, fitTo } from "@/lib/x-fit";
+import { stripLinks } from "@/lib/x-links";
 import { competitiveSnapshot, draftKB, getKB, kbForPrompt, snapshotForPrompt, type KnowledgeBase } from "@/lib/knowledge-base";
 
 export const AUTOPILOT = "Autopilot";
@@ -242,7 +243,7 @@ Audience: decision-makers at US companies (or companies entering the US). US Eng
 Rules:
 - Each post stands alone and is about ONE idea. Different topic for every post; never repeat a topic listed as already planned.
 - LinkedIn post: 500-1,300 characters. A strong first line (the hook), short paragraphs, a concrete takeaway, and a soft call to action (comment, follow, or visit the website). 2-4 relevant hashtags at the end. No emoji walls (at most 2 emoji).
-- X version: at most ${Math.min(xLimit, 270)} characters including 1-2 hashtags; same idea, tighter.
+- X version: at most ${Math.min(xLimit, 270)} characters including 1-2 hashtags; same idea, tighter; NO links or web addresses (X charges 13x more for a post with a link).
 - NEVER invent statistics, numbers, client names, quotes, awards, prices or results. If you need a number, use none.
 - No clickbait, no "In today's fast-paced world", no "Let's dive in", no "game-changer".
 - "image": a description of a photograph that illustrates the post — real-world scene, people or objects, editorial style. It must contain NO text, words, letters, numbers, logos or screens with writing.
@@ -371,7 +372,7 @@ async function attachPicture(orgId: string, contentId: string, idea: string): Pr
 
 function finalTexts(d: Draft, xLimit: number): { text: string; textX: string } {
   const text = Array.from(d.linkedin).slice(0, LINKEDIN_MAX).join("");
-  let x = d.x || d.linkedin;
+  let x = stripLinks(d.x || d.linkedin).text || d.x || d.linkedin;
   if (xLength(x) > xLimit) x = fitTo(x, xLimit);
   return { text, textX: x };
 }
@@ -542,7 +543,7 @@ async function revise(orgId: string, s: AutopilotSettings, budget: number): Prom
     try {
       const out = await runChat(
         ai,
-        `You revise a LinkedIn post of ${client?.name || "the company"}${about ? ` (${about})` : ""} following the reviewer's request exactly. US English. Keep 500-1,300 characters, never invent numbers, names or results. Also give the X version (max ${Math.min(xLimit, 270)} characters). Answer ONLY with JSON: {"linkedin": string, "x": string, "image": string|null} — "image" only when the reviewer asks for a different picture: a photo description with no text in it.`,
+        `You revise a LinkedIn post of ${client?.name || "the company"}${about ? ` (${about})` : ""} following the reviewer's request exactly. US English. Keep 500-1,300 characters, never invent numbers, names or results. Also give the X version (max ${Math.min(xLimit, 270)} characters, no links or web addresses). Answer ONLY with JSON: {"linkedin": string, "x": string, "image": string|null} — "image" only when the reviewer asks for a different picture: a photo description with no text in it.`,
         `REVIEWER'S REQUEST:\n${ask}\n\nCURRENT POST:\n${it.text}`,
         2000,
       );

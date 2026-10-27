@@ -23,6 +23,7 @@ import { getAISettings, runChat } from "@/lib/content/provider";
 import { addEvent, getSettings, LINKEDIN_MAX, MEDIA_SELECT, xLength, xMax } from "@/lib/publishing";
 import { aboutOf } from "@/lib/reports/ops/intelligence";
 import { clean, fitTo } from "@/lib/x-fit";
+import { stripLinks } from "@/lib/x-links";
 import { getKB, kbForPrompt } from "@/lib/knowledge-base";
 
 export const INTELLIGENCE = "Intelligence";
@@ -109,7 +110,7 @@ Rules:
 - Apply every instruction of the comment. Keep everything the comment does not ask to change (topic, voice, structure, hashtags) unless it must change to follow the comment.
 - US English. LinkedIn post: 300-1,300 characters unless the comment asks for another length; short paragraphs; at most 2 emoji.
 - NEVER invent statistics, numbers, client names, quotes, awards, prices or results. If the comment gives facts, use them as given.
-- X version: at most ${xLimit - 10} characters including hashtags; same idea, tighter.
+- X version: at most ${xLimit - 10} characters including hashtags; same idea, tighter; NO links or web addresses (X charges 13x more for a post with a link).
 - If the comment asks for NO change to the text (praise, thanks, a question, a scheduling note), set "change" to false.
 - "image": only when the comment asks for a different picture — a description of a photograph with NO text, letters, numbers, logos or screens with writing. Otherwise null.
 Answer ONLY with JSON: {"change": boolean, "linkedin": string, "x": string, "image": string|null, "note": string (one short sentence: what you changed)}`;
@@ -139,7 +140,7 @@ Answer ONLY with JSON: {"change": boolean, "linkedin": string, "x": string, "ima
     const text = textChanged ? Array.from(linkedin).slice(0, LINKEDIN_MAX).join("") : item.text;
     let textX = item.textX || "";
     if (textChanged) {
-      let x = clean(j.x || "") || text;
+      let x = stripLinks(clean(j.x || "") || text).text || clean(j.x || "") || text;
       if (xLength(x) > xLimit) x = fitTo(x, xLimit);
       textX = x;
     }

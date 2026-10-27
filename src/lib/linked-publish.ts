@@ -19,6 +19,7 @@ import { publishLink } from "@/lib/publishing-mail";
 import {
   getLinked, saveLinked, linkedinPost, linkedinToken, liMatches, xMatches, xPost, xTokenFresh, type Linked,
 } from "@/lib/linked-accounts";
+import { stripLinks } from "@/lib/x-links";
 
 function unb64(s: string): Uint8Array<ArrayBuffer> {
   const bin = atob(s);
@@ -87,7 +88,10 @@ export async function apiPublishDue(orgId: string): Promise<{ posted: number; fa
       } else {
         const { token, updated } = await xTokenFresh(l.x!);
         if (updated) { l.x = updated; await saveLinked(orgId, d.clientId!, l); }
-        res = await xPost(l.x!, token, d.text, pic);
+        // v0.7.3: X bills a post with a URL $0.20 instead of $0.015 (a reply too) — X posts go out with no link.
+        const x = stripLinks(d.text);
+        if (!x.text.trim()) throw new Error("This X post is only a link. Links are not posted on X (X charges $0.20 per link post) — add a sentence in the X version.");
+        res = await xPost(l.x!, token, x.text, pic);
       }
       const at = new Date();
       await prisma.scheduledPost.update({

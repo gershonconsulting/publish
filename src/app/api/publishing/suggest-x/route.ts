@@ -18,6 +18,7 @@ import { publishingCaller } from "@/lib/publishing-auth";
 import { getSettings, xLength, xMax } from "@/lib/publishing";
 import { getAISettings, runChat } from "@/lib/content/provider";
 import { clean, fitTo } from "@/lib/x-fit";
+import { stripLinks } from "@/lib/x-links";
 
 export async function POST(req: NextRequest) {
   const c = await publishingCaller(true);
@@ -31,7 +32,8 @@ export async function POST(req: NextRequest) {
     const target = Math.min(max, max <= 280 ? 270 : max);
     const system = `You rewrite B2B LinkedIn posts as a post for X (Twitter).
 Rules:
-- At most ${target} characters in total, counting spaces, emoji and hashtags. Links count as 23 characters.
+- At most ${target} characters in total, counting spaces, emoji and hashtags.
+- No links, URLs or web addresses at all (X charges 13x more for a post with a link). Do not write "link in comments" either.
 - US English. Same facts, same voice; no invented numbers, names or claims.
 - One tight message: the hook, the key point, and one hashtag or two at the end.
 - Keep the concrete facts (names, numbers, places). No emoji unless the original uses them; no abbreviations like gov't.
@@ -45,7 +47,7 @@ Answer with the X post text only.`;
     for (let attempt = 0; attempt < 3; attempt++) {
       const out = await runChat(settings, system, user, 400);
       model = out.model;
-      const t = clean(out.text);
+      const t = stripLinks(clean(out.text)).text;
       if (!t) continue;
       if (!best || xLength(t) < xLength(best)) best = t;
       if (xLength(t) <= max) {

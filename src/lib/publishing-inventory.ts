@@ -22,8 +22,9 @@
  */
 import prisma from "@/lib/db-raw";
 import { objectivesFor } from "@/lib/campaigns/objectives";
-import { alertTeam, esc, getTarget, quote, reviewToken, reviewUrl, sendMail, PUBLISHING_CLIENT_WHERE } from "@/lib/publishing";
+import { alertTeam, orgAlertStore, esc, getTarget, quote, reviewToken, reviewUrl, sendMail, PUBLISHING_CLIENT_WHERE } from "@/lib/publishing";
 import { publishLink } from "@/lib/publishing-mail";
+import { criticalUnchanged, noChangeLine, saveCritical } from "@/lib/alert-dedupe";
 
 export const TARGET_DAYS = 7;
 export const REVIEW_REMIND_AFTER_DAYS = 2;
@@ -193,18 +194,23 @@ export async function teamDigest(orgId: string, now = Date.now(), force = false)
         <td style="padding:8px 10px;border-bottom:1px solid #eee">${notes.join("<br>")}<div style="margin-top:4px;font-size:13px">${links.join(" &nbsp;·&nbsp; ")}</div></td></tr>`);
   }
   const table = rowsHtml.join("");
-  const critical = attention.filter((r) => r.level === "critical").length;
+  const criticalIds = attention.filter((r) => r.level === "critical").map((r) => r.clientId);
+  const critical = criticalIds.length;
+  // v0.6.1: the "under half a week" headline only when the set of companies changed since the last email.
+  const store = orgAlertStore(orgId);
+  const unchanged = await criticalUnchanged(store, "team", criticalIds);
   const sent = await alertTeam(
     orgId,
-    critical
+    critical && !unchanged
       ? `Content inventory: ${critical} client${critical === 1 ? " is" : "s are"} under half a week`
       : `Content inventory: ${attention.length} client${attention.length === 1 ? "" : "s"} need${attention.length === 1 ? "s" : ""} attention`,
-    `<p>Every client should always have <b>one week of approved content</b> ready to publish. Today:</p>
+    `${unchanged ? `<p style="color:#555"><i>${noChangeLine(critical)}</i></p>` : ""}<p>Every client should always have <b>one week of approved content</b> ready to publish. Today:</p>
      <table style="border-collapse:collapse;font-size:14px">${table}</table>
      <p style="color:#555;font-size:13px">Clients' reviewers are reminded automatically after ${REVIEW_REMIND_AFTER_DAYS} days (email PUB-104).</p>`,
     "INVENTORY",
     { href: publishLink("/publishing"), label: "Open Publish" },
   );
+  if (sent) await saveCritical(store, "team", criticalIds);
   if (sent) await setStamp(orgId, "publishing_digest_day", today);
   return { sent, rows };
 }

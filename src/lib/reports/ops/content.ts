@@ -8,6 +8,7 @@
  * in the library per company.
  */
 import { inventory, TARGET_DAYS, type InventoryRow } from "@/lib/publishing-inventory";
+import { noChangeLine } from "@/lib/alert-dedupe";
 import { etDayKey, etDayShort } from "../et-days";
 import { banner, esc, kpis, page, pill, section, SITE, table, TD, TDR, TH, THR, type Level } from "./shell";
 
@@ -45,11 +46,13 @@ function runsOut(r: InventoryRow): string {
   return esc(new Date(r.runsOutOn).toLocaleDateString("en-US", { timeZone: "America/New_York", weekday: "short", month: "short", day: "numeric" }));
 }
 
-export function renderContent(r: ContentReport): string {
+export function renderContent(r: ContentReport, opts: { unchanged?: boolean } = {}): string {
   const t = r.totals;
   const head = banner(
     r.level,
-    t.critical
+    t.critical && opts.unchanged
+      ? noChangeLine(t.critical)
+      : t.critical
       ? `${t.critical} of ${t.companies} companies have less than half a week of content ready`
       : t.low
         ? `${t.low} of ${t.companies} companies are under one week of content`
@@ -98,9 +101,10 @@ export function renderContent(r: ContentReport): string {
   });
 }
 
-export function contentSubject(r: ContentReport): string {
+export function contentSubject(r: ContentReport, opts: { unchanged?: boolean } = {}): string {
   const t = r.totals;
   const base = `Social Content Ready Report — ${r.dayShort}`;
+  if (t.critical && opts.unchanged) return `⚠️ ${base} — no change since yesterday (${t.critical} under half a week)`;
   if (t.critical) return `⛔ ${base} — ${t.critical} ${t.critical === 1 ? "company" : "companies"} under half a week`;
   if (t.low) return `⚠️ ${base} — ${t.low} under one week`;
   return `${base} — ${t.ready} posts ready, every company covered`;

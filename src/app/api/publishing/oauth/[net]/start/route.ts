@@ -9,11 +9,11 @@ import { publishingCaller } from "@/lib/publishing-auth";
 import { PUBLISHING_CLIENT_WHERE, SITE } from "@/lib/publishing";
 import { appReady, getAppCreds, linkedinAuthorizeUrl, newState, xAuthorizeUrl, type LinkNet } from "@/lib/linked-accounts";
 
-const back = (msg: string) => NextResponse.redirect(`${SITE}/settings?linked_error=${encodeURIComponent(msg)}#linked`);
+const back = (msg: string) => NextResponse.redirect(`${SITE}/publishing/accounts?linked_error=${encodeURIComponent(msg)}#linked`);
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ net: string }> }) {
   const c = await publishingCaller(true);
-  if (c instanceof NextResponse) return back("Sign in to social.gershon.ai first.");
+  if (c instanceof NextResponse) return back("Sign in to publish.gershon.ai first.");
   const { net } = await ctx.params;
   if (net !== "linkedin" && net !== "x") return back("Unknown network.");
   const clientId = new URL(req.url).searchParams.get("clientId") || "";

@@ -375,7 +375,12 @@ export async function xPost(c: XConn, token: string, text: string, picture: { by
 export function liMatches(c: LiConn | null | undefined, target: string | null): boolean {
   if (!c?.author || !target) return false;
   const a = c.authors.find((x) => x.urn === c.author);
-  if (!a) return false;
+  return liAuthorMatches(a, target);
+}
+
+/** Does this page / profile publish to the delivery's LinkedIn target? */
+export function liAuthorMatches(a: LiAuthor | undefined, target: string | null): boolean {
+  if (!a || !target) return false;
   if (/\/groups\//i.test(target)) return false; // groups: extension only
   if (a.kind === "person") return /\/in\//i.test(target);
   const m = target.match(/linkedin\.com\/(?:company|showcase)\/([^/?#]+)/i);
@@ -390,4 +395,29 @@ export function xMatches(c: XConn | null | undefined, target: string | null): bo
 export function liAuthorUrl(a: LiAuthor | undefined): string | null {
   if (!a || a.kind !== "organization") return null;
   return `https://www.linkedin.com/company/${a.vanity || a.id}/`;
+}
+
+const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+
+/**
+ * v0.7.1 — the page a company should post as, from one LinkedIn connection:
+ * 1) the page its LinkedIn destination points at; 2) a page with the same name;
+ * 3) the only page whose name contains the company name (or the reverse).
+ * null when nothing matches or the name match is ambiguous — never a guess
+ * (Amphasys was put on the Valos page by the old "first page" default).
+ */
+export function pickAuthor(authors: LiAuthor[], target: string | null, companyName: string): LiAuthor | null {
+  const pages = authors.filter((a) => a.kind === "organization");
+  // A personal-profile destination (e.g. WALLIX posts on its CEO's profile) is never auto-assigned:
+  // the connection only knows the admin's own profile, which is usually someone else.
+  if (target && /\/in\//i.test(target)) return null;
+  const byUrl = pages.find((a) => liAuthorMatches(a, target));
+  if (byUrl) return byUrl;
+  const n = norm(companyName);
+  if (n.length < 3) return null;
+  const same = pages.filter((a) => norm(a.name) === n);
+  if (same.length === 1) return same[0];
+  if (same.length > 1) return null;
+  const close = pages.filter((a) => { const m = norm(a.name); return m.length >= 3 && (m.includes(n) || n.includes(m)); });
+  return close.length === 1 ? close[0] : null;
 }

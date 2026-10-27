@@ -69,6 +69,16 @@ export function PublishingAccountsClient() {
   const [canWrite, setCanWrite] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [showApi, setShowApi] = useState(false);
+  // v0.7.1: coming back from LinkedIn / X (?linked= / ?linked_error=) opens the API section.
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get("linked") || sp.get("linked_error")) {
+        setShowApi(true);
+        setTimeout(() => document.getElementById("linked")?.scrollIntoView({ block: "start" }), 600);
+      }
+    } catch {}
+  }, []);
 
   const load = useCallback(async () => {
     try {

@@ -3,12 +3,17 @@ export const runtime = "edge";
  * GET /api/publishing/oauth/:net/callback — LinkedIn / X send the account owner
  * back here after "Allow" (v4.60.0). The code is exchanged for the posting
  * permission, which is stored sealed on the company (lib/linked-accounts).
+ *
+ * v0.7.1: returns to /publishing/accounts (Publish has no /settings page — the
+ * old address 404'd). One LinkedIn "Allow" now connects EVERY Publish company
+ * whose page the signed-in admin manages, each posting as its own page.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { SITE, getTarget, saveTarget } from "@/lib/publishing";
-import { getLinked, linkedinConnect, liAuthorUrl, saveLinked, takeState, xConnect } from "@/lib/linked-accounts";
+import prisma from "@/lib/db-raw";
+import { SITE, getTarget, saveTarget, PUBLISHING_CLIENT_WHERE } from "@/lib/publishing";
+import { getLinked, linkedinConnect, liAuthorUrl, pickAuthor, saveLinked, takeState, xConnect, type LiConn } from "@/lib/linked-accounts";
 
-const done = (q: string) => NextResponse.redirect(`${SITE}/settings?${q}#linked`);
+const done = (q: string) => NextResponse.redirect(`${SITE}/publishing/accounts?${q}#linked`);
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ net: string }> }) {
   const { net } = await ctx.params;
@@ -19,19 +24,45 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ net: string
   const code = sp.get("code");
   if (!code) return done(`linked_error=${encodeURIComponent("No authorization came back — press Connect again.")}`);
   try {
-    const l = await getLinked(st.orgId, st.clientId);
-    const t = await getTarget(st.orgId, st.clientId);
-    if (net === "linkedin") {
-      l.linkedin = await linkedinConnect(code, st.by, l.linkedin);
-      const a = l.linkedin.authors.find((x) => x.urn === l.linkedin!.author);
-      const url = liAuthorUrl(a);
-      if (url && !t.linkedinUrl) await saveTarget(st.orgId, st.clientId, { linkedinUrl: url });
-    } else {
+    if (net !== "linkedin") {
+      const l = await getLinked(st.orgId, st.clientId);
+      const t = await getTarget(st.orgId, st.clientId);
       l.x = await xConnect(code, st.verifier || "", st.by);
       if (!t.xHandle) await saveTarget(st.orgId, st.clientId, { xHandle: l.x.username });
+      await saveLinked(st.orgId, st.clientId, l);
+      return done(`linked=x&company=${encodeURIComponent(st.clientId)}`);
     }
-    await saveLinked(st.orgId, st.clientId, l);
-    return done(`linked=${net}&company=${encodeURIComponent(st.clientId)}`);
+
+    const first = await getLinked(st.orgId, st.clientId);
+    const conn = await linkedinConnect(code, st.by, first.linkedin);
+    const clients = await prisma.client.findMany({
+      where: { organizationId: st.orgId, archivedAt: null, status: { not: "ARCHIVED" }, ...PUBLISHING_CLIENT_WHERE },
+      select: { id: true, name: true },
+    });
+    const connected: string[] = [];
+    const noPage: string[] = [];
+    for (const cl of clients) {
+      const isFirst = cl.id === st.clientId;
+      const l = isFirst ? first : await getLinked(st.orgId, cl.id);
+      // Other companies: only fill empty ones or refresh ones made by this same LinkedIn member.
+      if (!isFirst && l.linkedin && l.linkedin.memberUrn && l.linkedin.memberUrn !== conn.memberUrn) continue;
+      const t = await getTarget(st.orgId, cl.id);
+      const kept = l.linkedin?.author && conn.authors.some((a) => a.urn === l.linkedin!.author) ? conn.authors.find((a) => a.urn === l.linkedin!.author)! : null;
+      const a = kept || pickAuthor(conn.authors, t.linkedinUrl, cl.name);
+      if (!a) {
+        if (isFirst) noPage.push(cl.name);
+        continue;
+      }
+      const c: LiConn = { ...conn, author: a.urn, lastError: null };
+      l.linkedin = c;
+      await saveLinked(st.orgId, cl.id, l);
+      const url = liAuthorUrl(a);
+      if (url && !t.linkedinUrl) await saveTarget(st.orgId, cl.id, { linkedinUrl: url });
+      connected.push(cl.name);
+    }
+    const q = new URLSearchParams({ linked: "linkedin", company: st.clientId, count: String(connected.length) });
+    if (noPage.length) q.set("linked_error", `${noPage[0]}: none of the LinkedIn pages you manage matches this company, so it stays on the Chrome extension. Ask its page owner to make you an admin, then connect again.`);
+    return done(q.toString());
   } catch (e) {
     return done(`linked_error=${encodeURIComponent(e instanceof Error ? e.message : "Connection failed")}`);
   }

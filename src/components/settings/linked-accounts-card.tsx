@@ -41,7 +41,11 @@ export function LinkedAccountsCard() {
     try {
       const sp = new URLSearchParams(window.location.search);
       if (sp.get("linked_error")) setErr(sp.get("linked_error"));
-      if (sp.get("linked")) setNote(`${sp.get("linked") === "x" ? "X" : "LinkedIn"} connected.`);
+      if (sp.get("linked") === "x") setNote("X connected.");
+      else if (sp.get("linked")) {
+        const n = Number(sp.get("count") || "1");
+        setNote(`LinkedIn connected for ${n} compan${n === 1 ? "y" : "ies"} — each one posts as its own page. Companies still showing "Connect LinkedIn" have no page you manage.`);
+      }
     } catch {}
   }, [load]);
 

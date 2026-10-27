@@ -14,6 +14,7 @@ import Link from "next/link";
 import { Loader2, RefreshCw } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { useSelectedClient } from "@/lib/selected-client";
+import { ClientFrames } from "@/components/ui/client-frames";
 import { Card, Dot, NetBadge, SectionBody, StackBar, TextLink, ago, fmtIn, tzAbbr, withClient, type Section } from "@/components/publish/ui";
 import type {
   Action, ApprovalRow, BrowserView, ConnRow, ExtensionStatus, Failure, NetHealth, RunwayRow, Throughput, UpcomingRow, WaitingItem, WindowKey,
@@ -117,6 +118,7 @@ export function DashboardClient() {
       ) : (
         <div className="space-y-5">
           <Actions actions={data.actions} />
+          <ValidatedFrames s={data.runway} />
           <ThroughputTiles s={data.throughput} label={data.windowLabel} />
           <NextSeven s={data.upcoming} clientId={clientId} />
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -275,6 +277,29 @@ function WeekBars({ per, max }: { per: { d: string; li: number; x: number }[]; m
         );
       })}
     </svg>
+  );
+}
+
+/* ── v0.7.0 Validated-content frames ─────────────────────────────────────────
+ * One framed card per company: validated (approved or scheduled) posting days
+ * vs posting days required for the rest of this month + next month.
+ * Green = fully covered · Orange = 50–99% · Red = under 50% ("not enough validated"). */
+function ValidatedFrames({ s }: { s: Section<RunwayRow[]> }) {
+  if (!s || !s.ok) return null;
+  return (
+    <ClientFrames
+      title="Clients — validated content"
+      subtitle="Posting days covered by approved or scheduled posts, rest of this month + next month. Green = fully covered · Orange = 50–99% · Red = under 50% — not enough validated."
+      items={s.data.map((r) => {
+        const req = r.thisMonth.required + r.nextMonth.required;
+        const ok = r.thisMonth.scheduled + r.thisMonth.approved + r.nextMonth.scheduled + r.nextMonth.approved;
+        return {
+          id: r.clientId, name: r.name, href: withClient("/publishing", r.clientId),
+          ratio: req ? Math.min(ok, req) / req : null,
+          detail: req ? `${Math.min(ok, req)} of ${req} posting days validated` : "no posting days required",
+        };
+      })}
+    />
   );
 }
 

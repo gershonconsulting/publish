@@ -118,7 +118,7 @@ export async function saveLinked(orgId: string, clientId: string, l: Linked): Pr
 
 // ── OAuth state (one-time, 15 minutes) ───────────────────────────────────────
 
-type OAuthState = { orgId: string; clientId: string; net: LinkNet; verifier: string | null; by: string | null; at: number };
+type OAuthState = { orgId: string; clientId: string; net: LinkNet; verifier: string | null; by: string | null; at: number; back?: string | null };
 const STATE_KEY = (s: string) => `oauth_state:${s}`;
 
 function rand(n: number): string {
@@ -132,10 +132,11 @@ function b64url(bytes: Uint8Array): string {
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-export async function newState(orgId: string, clientId: string, net: LinkNet, by: string | null): Promise<{ state: string; challenge: string | null }> {
+/** back: v0.8.1 — a public page to return to (the client X connect link) instead of Connections. */
+export async function newState(orgId: string, clientId: string, net: LinkNet, by: string | null, back: string | null = null): Promise<{ state: string; challenge: string | null }> {
   const state = rand(16);
   const verifier = net === "x" ? b64url(crypto.getRandomValues(new Uint8Array(48))) : null;
-  const st: OAuthState = { orgId, clientId, net, verifier, by, at: Date.now() };
+  const st: OAuthState = { orgId, clientId, net, verifier, by, at: Date.now(), back };
   await prisma.orgSetting.upsert({
     where: { organizationId_key: { organizationId: orgId, key: STATE_KEY(state) } },
     create: { organizationId: orgId, key: STATE_KEY(state), value: JSON.stringify(st) },

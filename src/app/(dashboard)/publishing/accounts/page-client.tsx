@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { useSelectedClient } from "@/lib/selected-client";
 import { MyXAccounts } from "@/components/publishing/my-x-accounts";
+import { XConnectLinks } from "@/components/publishing/x-connect-links";
 import { Check, ChevronDown, ChevronRight, Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { NetChip } from "@/components/publishing/shared";
 import { LinkedAccountsCard } from "@/components/settings/linked-accounts-card";
@@ -117,6 +118,7 @@ export function PublishingAccountsClient() {
 
       {/* v0.8.0: the X twin of "Your LinkedIn pages" — accounts already signed in to the Chromes. */}
       <MyXAccounts browsers={browsers} rows={allRows} canWrite={canWrite} onChanged={() => void load()} />
+      <XConnectLinks canWrite={canWrite} />
 
       <PublishingChromes browsers={browsers} />
 

@@ -14,6 +14,7 @@
  *   - /api/review/ (token / secret in the URL or route is the access)
  *   - /api/media/ (token / secret in the URL or route is the access)
  *   - /api/connect/ (token / secret in the URL or route is the access)
+ *   - /x-connect/ + /api/x-connect/ (v0.8.1: a client connects its own X account; gx_ token in the URL)
  *   - /api/cron/ (Bearer CRON_SECRET, checked in each route)
  *   - /api/extension/version (public: the popup's update check)
  *   - /api/extension/publish/ (Publish's own Chrome extension: no session
@@ -31,11 +32,11 @@ import { getToken } from "next-auth/jwt";
 import { neon } from "@neondatabase/serverless";
 
 /** Pages and API prefixes that do not need a Gershon session. */
-const OPEN_PAGES = ["/login", "/review/", "/connect/"];
+const OPEN_PAGES = ["/login", "/review/", "/connect/", "/x-connect/"];
 // v0.5.0: the publishing engine moved here from Social. These routes check
 // their own credential (Bearer CRON_SECRET, or the extension's workspace /
 // gp_ token) and fail closed without it. v0.6.0: + the extension version check.
-const OPEN_API = ["/api/auth/", "/api/ping", "/api/review/", "/api/media/", "/api/connect/", "/api/cron/", "/api/extension/version", "/api/extension/publish/"];
+const OPEN_API = ["/api/auth/", "/api/ping", "/api/review/", "/api/media/", "/api/connect/", "/api/x-connect/", "/api/cron/", "/api/extension/version", "/api/extension/publish/"];
 
 function startsWithAny(pathname: string, prefixes: string[]): boolean {
   return prefixes.some((p) => (p.endsWith("/") ? pathname.startsWith(p) : pathname === p || pathname.startsWith(p + "/")));

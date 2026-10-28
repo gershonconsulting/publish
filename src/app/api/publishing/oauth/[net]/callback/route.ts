@@ -19,6 +19,29 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ net: string
   const { net } = await ctx.params;
   const sp = new URL(req.url).searchParams;
   const st = await takeState(sp.get("state") || "");
+  // v0.8.1: a client X connect link (/x-connect/<token>) comes back to that public page, never to Connections.
+  const pub = st?.back && /^\/x-connect\/gx_[a-f0-9]{48}$/.test(st.back) ? st.back : null;
+  const back = (q: Record<string, string>) => NextResponse.redirect(`${SITE}${pub}?${new URLSearchParams(q)}`);
+  if (pub && st) {
+    if (sp.get("error")) return back({ error: sp.get("error") === "access_denied" ? "You did not click Allow — nothing was connected." : `X: ${sp.get("error_description") || sp.get("error")}` });
+    const code0 = sp.get("code");
+    if (!code0) return back({ error: "X sent no authorization back. Please try again." });
+    try {
+      const l = await getLinked(st.orgId, st.clientId);
+      const t = await getTarget(st.orgId, st.clientId);
+      const x = await xConnect(code0, st.verifier || "", st.by);
+      const want = (t.xHandle || "").replace(/^@/, "").toLowerCase();
+      if (want && x.username.toLowerCase() !== want) {
+        return back({ error: `You are signed in to X as @${x.username}, but this link is for @${t.xHandle!.replace(/^@/, "")}. Switch account on x.com, then press Connect again.` });
+      }
+      l.x = x;
+      if (!t.xHandle) await saveTarget(st.orgId, st.clientId, { xHandle: x.username });
+      await saveLinked(st.orgId, st.clientId, l);
+      return back({ connected: x.username });
+    } catch (e) {
+      return back({ error: e instanceof Error ? e.message : "Connection failed" });
+    }
+  }
   if (!st || st.net !== net) return done(`linked_error=${encodeURIComponent("This connection link expired — press Connect again.")}`);
   if (sp.get("error")) return done(`linked_error=${encodeURIComponent(`${net === "x" ? "X" : "LinkedIn"}: ${sp.get("error_description") || sp.get("error")}`)}`);
   const code = sp.get("code");

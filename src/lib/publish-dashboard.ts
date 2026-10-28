@@ -24,6 +24,7 @@ import { isOnline, listBrowsers, targetStatus, type PublishBrowser } from "@/lib
 import { computeRunway, dayLabel, localDate, type Runway, DAY_MS } from "@/lib/publish-runway";
 import { EXTENSION_LATEST, PUBLISH_BROWSER_ID_PREFIX } from "@/lib/extension-version";
 import { readExtSeen, semverLt } from "@/lib/extension/seen";
+import { healthScore } from "@/lib/publish-score";
 
 export const BUSINESS_TZ = "America/New_York";
 const STUCK_MS = 20 * 60 * 1000;
@@ -171,8 +172,11 @@ export type ApprovalRow = {
   oldestWaitingDays: number | null; revisions: number;
 };
 
-async function approvals(orgId: string, companies: Company[], now: number): Promise<{ rows: ApprovalRow[]; oldest: WaitingItem[] }> {
-  if (!companies.length) return { rows: [], oldest: [] };
+/** v0.9.0: how long posts have been waiting, by age band (drafts excluded). */
+export type Aging = { band: string; client: number; internal: number; revision: number }[];
+
+async function approvals(orgId: string, companies: Company[], now: number): Promise<{ rows: ApprovalRow[]; oldest: WaitingItem[]; aging: Aging; drafts: number }> {
+  if (!companies.length) return { rows: [], oldest: [], aging: [], drafts: 0 };
   const items = await prisma.contentItem.findMany({
     where: { organizationId: orgId, clientId: { in: companies.map((c) => c.id) }, status: { in: ["DRAFT", "IN_REVIEW", "CHANGES_REQUESTED"] } },
     select: { id: true, clientId: true, status: true, title: true, text: true, createdAt: true, submittedAt: true, updatedAt: true },
@@ -230,7 +234,43 @@ async function approvals(orgId: string, companies: Company[], now: number): Prom
     .filter((w) => w.stage !== "draft")
     .sort((a, b) => b.ageDays - a.ageDays)
     .slice(0, 12);
-  return { rows: rows.filter((r) => r.drafts + r.waitingClient + r.waitingInternal + r.changesRequested > 0), oldest };
+  const bands: [string, number, number][] = [["0–1 day", 0, 1], ["2–3 days", 2, 3], ["4–7 days", 4, 7], ["8+ days", 8, 1e9]];
+  const aging: Aging = bands.map(([band, lo, hi]) => {
+    const inBand = waiting.filter((w) => w.stage !== "draft" && w.ageDays >= lo && w.ageDays <= hi);
+    return {
+      band,
+      client: inBand.filter((w) => w.stage === "client").length,
+      internal: inBand.filter((w) => w.stage === "internal").length,
+      revision: inBand.filter((w) => w.stage === "revision").length,
+    };
+  });
+  const drafts = waiting.filter((w) => w.stage === "draft").length;
+  return { rows: rows.filter((r) => r.drafts + r.waitingClient + r.waitingInternal + r.changesRequested > 0), oldest, aging, drafts };
+}
+
+// ── v0.9.0 Trend: the last 14 days, one point per New York day ───────────────
+
+export type TrendPoint = { day: string; created: number; approved: number; published: number; failed: number };
+
+async function trend(orgId: string, companies: Company[], now: number): Promise<TrendPoint[]> {
+  const scope = { organizationId: orgId, clientId: { in: companies.map((c) => c.id) } };
+  const since = new Date(now - 14 * DAY_MS);
+  const [created, approved, posted, failed] = await Promise.all([
+    prisma.contentItem.findMany({ where: { ...scope, createdAt: { gte: since } }, select: { createdAt: true } }),
+    prisma.contentItem.findMany({ where: { ...scope, approvedAt: { gte: since } }, select: { approvedAt: true } }),
+    prisma.scheduledPost.findMany({ where: { ...scope, status: "POSTED", postedAt: { gte: since } }, select: { postedAt: true } }),
+    prisma.scheduledPost.findMany({ where: { ...scope, status: { in: ["FAILED", "MISSED"] }, updatedAt: { gte: since } }, select: { updatedAt: true } }),
+  ]);
+  const today = localDate(new Date(now), BUSINESS_TZ);
+  const days: string[] = [];
+  for (let i = 13; i >= 0; i--) days.push(localDate(new Date(Date.parse(today + "T12:00:00Z") - i * DAY_MS), "UTC"));
+  const count = (dates: (Date | null)[]) => {
+    const m = new Map<string, number>();
+    for (const d of dates) if (d) { const k = localDate(d, BUSINESS_TZ); m.set(k, (m.get(k) || 0) + 1); }
+    return m;
+  };
+  const c = count(created.map((x) => x.createdAt)), a = count(approved.map((x) => x.approvedAt)), p = count(posted.map((x) => x.postedAt)), f = count(failed.map((x) => x.updatedAt));
+  return days.map((day) => ({ day, created: c.get(day) || 0, approved: a.get(day) || 0, published: p.get(day) || 0, failed: f.get(day) || 0 }));
 }
 
 // ── Delivery health ──────────────────────────────────────────────────────────
@@ -302,7 +342,32 @@ export type BrowserView = {
   id: string; kind: "publish" | "social"; label: string; version: string | null; outOfDate: boolean | null;
   lastSeenAt: string; online: boolean; xSignedIn: boolean; x: string[]; linkedinSignedIn: boolean; linkedinName: string | null;
   linkedinPages: number; lastPostAt: string | null; lastError: string | null;
+  /** v0.9.0 Settings → Computers. */
+  named: boolean; deviceLabel: string;
+  state: ComputerState; stateText: string;
 };
+
+/**
+ * v0.9.0: one word for a computer's Publish extension, as Settings shows it.
+ *   working      online, up to date, signed in to at least one network
+ *   out_of_date  online but an older extension (update it)
+ *   signed_out   online, but signed out of LinkedIn AND X (can't publish)
+ *   offline      not checked in for 15+ minutes (Chrome closed, computer asleep)
+ */
+export type ComputerState = "working" | "out_of_date" | "signed_out" | "offline";
+export function computerState(v: { online: boolean; outOfDate: boolean | null; xSignedIn: boolean; linkedinSignedIn: boolean; lastSeenAt: string }, now = Date.now()): { state: ComputerState; text: string } {
+  if (!v.online) return { state: "offline", text: `Not working — last check-in ${agoWords(v.lastSeenAt, now)}. Chrome is closed or the computer is asleep.` };
+  if (v.outOfDate) return { state: "out_of_date", text: `Not working well — runs an old extension, update to v${EXTENSION_LATEST}.` };
+  if (!v.xSignedIn && !v.linkedinSignedIn) return { state: "signed_out", text: "Not working — signed out of LinkedIn and X in this Chrome." };
+  return { state: "working", text: "Working — checks in every 5 minutes and can publish." };
+}
+function agoWords(iso: string, now: number): string {
+  const m = Math.max(0, Math.round((now - Date.parse(iso)) / 60000));
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h} h ago`;
+  return `${Math.round(h / 24)} days ago`;
+}
 
 export function browserView(b: PublishBrowser, now = Date.now()): BrowserView {
   const kind = b.id.startsWith(PUBLISH_BROWSER_ID_PREFIX) ? "publish" : "social";
@@ -314,6 +379,11 @@ export function browserView(b: PublishBrowser, now = Date.now()): BrowserView {
     linkedinSignedIn: b.linkedin.signedIn, linkedinName: b.linkedin.name,
     linkedinPages: Object.values(b.li || {}).filter((v) => v.ok).length,
     lastPostAt: b.lastPostAt || null, lastError: b.lastError || null,
+    named: !!b.named, deviceLabel: b.deviceLabel || b.label,
+    ...(() => {
+      const cs = computerState({ online: isOnline(b, now), outOfDate: kind === "publish" ? (b.version ? semverLt(b.version, EXTENSION_LATEST) : null) : null, xSignedIn: b.x.signedIn, linkedinSignedIn: b.linkedin.signedIn, lastSeenAt: b.lastSeenAt }, now);
+      return { state: cs.state, stateText: cs.text };
+    })(),
   };
 }
 
@@ -386,7 +456,7 @@ function q(href: string, clientId: string | null): string {
 function buildActions(input: {
   now: number;
   runways: Section<RunwayRow[]>;
-  approvals: Section<{ rows: ApprovalRow[]; oldest: WaitingItem[] }>;
+  approvals: Section<{ rows: ApprovalRow[]; oldest: WaitingItem[]; aging: Aging; drafts: number }>;
   health: Section<{ networks: NetHealth[]; failures: Failure[] }>;
   conns: Section<ConnRow[]>;
   browsers: Section<BrowserView[]>;
@@ -508,7 +578,7 @@ export async function dashboard(orgId: string, opts: { window: WindowKey; client
   const browsersRaw = await section(() => listBrowsers(orgId));
   const browsersList = browsersRaw.ok ? browsersRaw.data : [];
   const upcoming = await section(() => nextSevenDays(orgId, companies, now));
-  const [rw, ap, hl, cn, tp, ext] = await Promise.all([
+  const [rw, ap, hl, cn, tp, ext, tr] = await Promise.all([
     section(() => runways(orgId, companies, now)),
     section(() => approvals(orgId, companies, now)),
     section(() => deliveryHealth(orgId, companies, from, now)),
@@ -517,9 +587,11 @@ export async function dashboard(orgId: string, opts: { window: WindowKey; client
       : Promise.resolve({ ok: false, error: browsersRaw.error } as Section<ConnRow[]>),
     section(() => throughput(orgId, companies, from)),
     section(() => extensionStatus(browsersList)),
+    section(() => trend(orgId, companies, now)),
   ]);
   const browsers: Section<BrowserView[]> = browsersRaw.ok ? { ok: true, data: browsersList.map((b) => browserView(b, now)) } : browsersRaw;
   const actions = buildActions({ now, runways: rw, approvals: ap, health: hl, conns: cn, browsers, extension: ext, companies });
+  const score = healthScore({ runways: rw, approvals: ap, health: hl, conns: cn, browsers });
   return {
     generatedAt: new Date(now).toISOString(),
     window: opts.window,
@@ -535,6 +607,8 @@ export async function dashboard(orgId: string, opts: { window: WindowKey; client
     browsers,
     throughput: tp,
     extension: ext,
+    trend: tr,
+    score,
     actions,
   };
 }

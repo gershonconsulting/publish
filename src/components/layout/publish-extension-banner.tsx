@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertOctagon, Puzzle } from "lucide-react";
 import { EXTENSION_LATEST, EXTENSION_ZIP_NAME, EXTENSION_ZIP_URL } from "@/lib/extension-version";
+import { usePublishesHere } from "@/lib/computer-mode";
 
 const THROTTLE_KEY = "publish:ext-seen-reported";
 const DISMISS_KEY = "publish:ext-missing-dismissed";
@@ -45,7 +46,16 @@ function report(version: string) {
 
 /** Shared hook: the Publish extension version in this browser, "missing", or null while checking. */
 export function usePublishExtension(): string | "missing" | null {
+  return usePublishExtensionInfo().version;
+}
+
+/**
+ * v0.9.0: version AND this Chrome's publishing id (extension 0.2.1+ sends it;
+ * older ones answer without it → browserId null).
+ */
+export function usePublishExtensionInfo(): { version: string | "missing" | null; browserId: string | null } {
   const [v, setV] = useState<string | "missing" | null>(null);
+  const [bid, setBid] = useState<string | null>(null);
   useEffect(() => {
     let found = false;
     const onMsg = (e: MessageEvent) => {
@@ -55,6 +65,7 @@ export function usePublishExtension(): string | "missing" | null {
       if ((d.type === "PUBLISH_PONG" || d.type === "PUBLISH_HELLO") && typeof d.version === "string") {
         found = true;
         setV(d.version);
+        if (typeof d.browserId === "string" && /^[A-Za-z0-9_-]{6,40}$/.test(d.browserId)) setBid(d.browserId);
       }
     };
     window.addEventListener("message", onMsg);
@@ -63,11 +74,13 @@ export function usePublishExtension(): string | "missing" | null {
     const t2 = setTimeout(() => { if (!found) setV("missing"); }, 3000);
     return () => { window.removeEventListener("message", onMsg); clearTimeout(t1); clearTimeout(t2); };
   }, []);
-  return v;
+  return { version: v, browserId: bid };
 }
 
 export function PublishExtensionBanner() {
   const v = usePublishExtension();
+  // v0.9.0: a viewing-only computer (Settings → This computer) gets no "not installed" notice.
+  const [publishesHere] = usePublishesHere();
   const [dismissed, setDismissed] = useState(true);
   useEffect(() => {
     try { setDismissed(window.localStorage.getItem(DISMISS_KEY) === new Date().toISOString().slice(0, 10)); } catch { setDismissed(false); }
@@ -88,7 +101,7 @@ export function PublishExtensionBanner() {
       </div>
     );
   }
-  if (v === "missing" && !dismissed) {
+  if (v === "missing" && !dismissed && publishesHere) {
     return (
       <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 px-4 py-2.5 flex flex-wrap items-center gap-3 text-sm">
         <Puzzle size={16} className="flex-shrink-0" />
@@ -96,6 +109,7 @@ export function PublishExtensionBanner() {
           The Publish extension is not installed in this Chrome. Posts go out only from a Chrome that has it (this one does not need it unless it is a publishing Chrome).
         </div>
         <Link href="/extension" className="font-semibold underline">Install</Link>
+        <Link href="/settings#this-computer" className="font-semibold underline">This computer only views</Link>
         <button
           onClick={() => { try { window.localStorage.setItem(DISMISS_KEY, new Date().toISOString().slice(0, 10)); } catch {} setDismissed(true); }}
           className="text-xs text-amber-800 hover:underline"

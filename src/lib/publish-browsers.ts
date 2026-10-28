@@ -42,6 +42,10 @@ export type PublishBrowser = {
   li: Record<string, LiCheck>;
   lastPostAt?: string | null;
   lastError?: string | null;
+  /** v0.9.0: set when the team named this computer in Settings (label = that name). */
+  named?: boolean;
+  /** v0.9.0: what the extension calls itself ("Publish ext · Chrome on Windows (…)"). */
+  deviceLabel?: string;
 };
 
 /** "company/gershonconsulting", "groups/42835334", "in/oattia" — or null. */
@@ -141,13 +145,43 @@ export function targetStatus(all: PublishBrowser[], platform: "LINKEDIN" | "TWIT
 
 // ── Storage ──────────────────────────────────────────────────────────────────
 
+/**
+ * v0.9.0 Settings → Computers: a name the team gives a computer ("Olivier —
+ * home", "24/7 remote PC"). Stored apart from the check-in row, so the
+ * extension's 5-minute check-in never overwrites it.
+ */
+export const BROWSER_NAME_PREFIX = "publish_browser_name:";
+
+export async function setBrowserName(orgId: string, id: string, name: string | null): Promise<void> {
+  const key = BROWSER_NAME_PREFIX + id;
+  const v = (name || "").replace(/\s+/g, " ").trim().slice(0, 60);
+  if (!v) {
+    await prisma.orgSetting.deleteMany({ where: { organizationId: orgId, key } });
+    return;
+  }
+  await prisma.orgSetting.upsert({
+    where: { organizationId_key: { organizationId: orgId, key } },
+    create: { organizationId: orgId, key, value: v },
+    update: { value: v },
+  });
+}
+
 export async function listBrowsers(orgId: string): Promise<PublishBrowser[]> {
-  const rows = await prisma.orgSetting.findMany({ where: { organizationId: orgId, key: { startsWith: BROWSER_PREFIX } } });
+  const rows = await prisma.orgSetting.findMany({
+    where: { organizationId: orgId, OR: [{ key: { startsWith: BROWSER_PREFIX } }, { key: { startsWith: BROWSER_NAME_PREFIX } }] },
+  });
+  const names = new Map<string, string>();
+  for (const r of rows) if (r.key.startsWith(BROWSER_NAME_PREFIX) && r.value) names.set(r.key.slice(BROWSER_NAME_PREFIX.length), r.value);
   const out: PublishBrowser[] = [];
   for (const r of rows) {
+    if (!r.key.startsWith(BROWSER_PREFIX)) continue;
     try {
       const b = JSON.parse(r.value || "{}") as PublishBrowser;
-      if (b?.id && b.lastSeenAt) out.push(normalize(b));
+      if (b?.id && b.lastSeenAt) {
+        const n = normalize(b);
+        const given = names.get(b.id);
+        out.push(given ? { ...n, deviceLabel: n.label, label: given, named: true } : n);
+      }
     } catch {}
   }
   // Forget browsers not seen for 30 days.
@@ -176,7 +210,9 @@ export async function getBrowser(orgId: string, id: string): Promise<PublishBrow
 
 export async function saveBrowser(orgId: string, b: PublishBrowser): Promise<void> {
   const key = BROWSER_PREFIX + b.id;
-  const value = JSON.stringify(normalize(b));
+  // A row read through listBrowsers carries the team's name in `label`: store the device's own label.
+  const { named, deviceLabel, ...raw } = b;
+  const value = JSON.stringify(normalize(named && deviceLabel ? { ...raw, label: deviceLabel } : raw));
   await prisma.orgSetting.upsert({
     where: { organizationId_key: { organizationId: orgId, key } },
     create: { organizationId: orgId, key, value },

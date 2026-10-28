@@ -29,7 +29,7 @@ import {
   Rocket,
   Puzzle,
   Send,
-  BookOpen, CalendarDays, Link2, Bot} from "lucide-react";
+  BookOpen, CalendarDays, Link2, Bot, Sparkles} from "lucide-react";
 import { useDemoMode, setDemoMode } from "@/lib/use-demo-mode";
 import { FilterPanel } from "./filter-panel";
 import { ClientList } from "./client-list";
@@ -57,6 +57,14 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { href: "/publishing/autopilot", icon: Bot, label: "Autopilot" },
       { href: "/knowledge-base", icon: BookOpen, label: "Knowledge Base" },
       { href: "/extension", icon: Puzzle, label: "Extension" },
+    ],
+  },
+  {
+    // v0.9.0: the cross-app Intelligence menu (Cloudflare AI) + Publish's own Settings.
+    label: "Workspace",
+    items: [
+      { href: "/intelligence", icon: Sparkles, label: "Intelligence" },
+      { href: "/settings", icon: Settings, label: "Settings" },
     ],
   },
 ];

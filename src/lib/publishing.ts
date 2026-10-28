@@ -22,12 +22,14 @@
  *    and by a 15-minute GitHub Actions cron — marks deliveries that never went
  *    out (MISSED), claims that never reported back (FAILED), confirms POSTED
  *    ones against the collected posts, rolls each item up to PUBLISHED /
- *    PARTIAL / FAILED, and emails once per problem and once per sign-out.
+ *    PARTIAL / FAILED, and sends ONE digest per run (v0.7.5, PUB-212) listing each
+ *    new problem once and each sign-out once.
  *
  * NEVER DOUBLE-POSTS: a delivery is retried only when the extension reports
  * it failed BEFORE clicking Post.
  */
 import { markAlerted, newFailures, type AlertStore, type FailedPost } from "@/lib/alert-dedupe";
+import { digestHtml, digestSubject, type DigestEntry, type DigestKind } from "@/lib/sweep-digest";
 import type { ClientType } from "@prisma/client";
 import prisma from "@/lib/db-raw";
 import { siteUrl } from "@/lib/site";
@@ -100,6 +102,8 @@ const EMPTY_STATE: PublisherState = { lastSeenAt: null, version: null, x: NO_SES
 
 export const LIVE_WINDOW_MS = 15 * 60 * 1000;
 const CLAIM_TIMEOUT_MS = 20 * 60 * 1000;
+/** v0.7.5: a post that gave up (FAILED) within this window goes into the next sweep digest. */
+const FAILED_LOOKBACK_MS = 24 * 3600 * 1000;
 export const MAX_ATTEMPTS = 3;
 
 async function readJson<T extends object>(orgId: string, key: string, fallback: T): Promise<T> {
@@ -214,7 +218,7 @@ export function liveStatus(st: PublisherState): { overall: Live; x: Live; linked
   };
 }
 
-// ── Text rules ───────────────────────────────────────────────────────────────────────────
+// ── Text rules ─────────────────────────────────────────────────────────────────────────
 
 /** X's count: every URL is 23, everything else one per code point. */
 export function xLength(text: string): number {
@@ -396,7 +400,7 @@ export async function resolveReviewToken(token: string): Promise<{ orgId: string
   return { orgId: row.organizationId, clientId: row.key.slice("review_token:".length) };
 }
 
-// ── Thread ───────────────────────────────────────────────────────────────────────────────
+// ── Thread ───────────────────────────────────────────────────────────────────────────
 
 export async function addEvent(
   orgId: string,
@@ -412,7 +416,7 @@ export async function addEvent(
   });
 }
 
-// ── Email ────────────────────────────────────────────────────────────────────────────────
+// ── Email ────────────────────────────────────────────────────────────────────────────
 
 export function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
@@ -482,7 +486,7 @@ export function quote(text: string): string {
   return `<blockquote style="border-left:3px solid #ddd;margin:8px 0;padding:4px 12px;color:#333;white-space:pre-wrap">${esc(text.slice(0, 1200))}</blockquote>`;
 }
 
-// ── Scheduling ───────────────────────────────────────────────────────────────────────────
+// ── Scheduling ─────────────────────────────────────────────────────────────────────────
 
 /** Create one delivery per network for an approved item. Returns problems, if any. */
 export async function scheduleItem(orgId: string, itemId: string, when: Date): Promise<string[]> {
@@ -590,7 +594,7 @@ export async function rollUp(itemId: string): Promise<void> {
   }
 }
 
-// ── Sweep ────────────────────────────────────────────────────────────────────────────────
+// ── Sweep ────────────────────────────────────────────────────────────────────────────
 
 function norm(s: string | null | undefined): string {
   return (s || "").replace(/https?:\/\/\S+/gi, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim().toLowerCase();
@@ -637,29 +641,11 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
     if (d.contentId) touched.add(d.contentId);
     missedPosts.push(d);
   }
-  // v0.6.1 — one email per sweep for all new misses, and never again for a post already alerted.
+  // v0.7.5 — nothing is emailed here any more: misses, stuck posts, failures and
+  // sign-outs all go into ONE digest at the end of the sweep (PUB-212).
   const store = orgAlertStore(orgId);
-  const freshMissed = new Set((await newFailures(store, missedPosts.map(failedOf), now)).map((p) => p.id));
-  const missedToSend = missedPosts.filter((d) => freshMissed.has(d.id));
-  if (missedToSend.length) {
-    const lines = missedToSend.map((d) => {
-      const net = NET_LABEL[d.platform as Net] ?? d.platform;
-      const why = d.lastError || (d.clientId && routedEarly.has(d.clientId) ? "the client's own publishing browser (Chrome with the Social extension) was offline or signed out." : "the publishing browser (Chrome with the Social extension) was offline or signed out.");
-      return `<p>Scheduled for <b>${nyTime(d.scheduledAt)}</b> on <b>${net}</b> — <b>not published</b>.</p>${quote(d.text)}<p>Reason: ${esc(why)}</p>`;
-    });
-    const one = missedToSend[0];
-    if (
-      await alertTeam(
-        orgId,
-        missedToSend.length === 1
-          ? `A ${NET_LABEL[one.platform as Net] ?? one.platform} post did not go out`
-          : `${missedToSend.length} scheduled posts did not go out`,
-        lines.join('<hr style="border:0;border-top:1px solid #eee;margin:12px 0">') + `<p style="color:#666;font-size:12px">Each post is reported once. You will hear about it again only if it fails again after a Retry, or after 7 days.</p>`,
-        "POST_MISSED",
-        { href: publishLink("/publishing/calendar", missedToSend.length === 1 ? { client: one.clientId, item: one.contentId } : {}), label: missedToSend.length === 1 ? "Open the post in Publish" : "Open the calendar in Publish" },
-      )
-    ) await markAlerted(store, missedToSend.map(failedOf), now);
-  }
+  const missedWhy = (d: (typeof late)[number]) =>
+    d.lastError || (d.clientId && routedEarly.has(d.clientId) ? "the client's own publishing browser (Chrome with the Social extension) was offline or signed out." : "the publishing browser (Chrome with the Social extension) was offline or signed out.");
 
   const stuck = await prisma.scheduledPost.findMany({
     where: { organizationId: orgId, status: "POSTING", claimedAt: { lt: new Date(now - CLAIM_TIMEOUT_MS) } },
@@ -672,23 +658,23 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
     failed++;
     if (d.contentId) touched.add(d.contentId);
   }
-  const freshStuck = new Set((await newFailures(store, stuck.map(failedOf), now)).map((p) => p.id));
-  const stuckToSend = stuck.filter((d) => freshStuck.has(d.id));
-  if (stuckToSend.length) {
-    const one = stuckToSend[0];
-    if (
-      await alertTeam(
-        orgId,
-        stuckToSend.length === 1
-          ? `A ${NET_LABEL[one.platform as Net] ?? one.platform} post may not have gone out`
-          : `${stuckToSend.length} posts may not have gone out`,
-        stuckToSend.map((d) => `<p>Publishing on ${NET_LABEL[d.platform as Net] ?? d.platform} started ${nyTime(d.claimedAt)} and never reported back.</p>${quote(d.text)}`).join("") +
-          `<p>Check the network: if a post is not there, press Retry.</p>`,
-        "POST_STUCK",
-        { href: publishLink("/publishing/calendar", stuckToSend.length === 1 ? { client: one.clientId, item: one.contentId } : {}), label: stuckToSend.length === 1 ? "Open the post in Publish" : "Open the calendar in Publish" },
-      )
-    ) await markAlerted(store, stuckToSend.map(failedOf), now);
-  }
+  // Posts that gave up elsewhere since the last sweeps (extension result → PUB-207,
+  // connected account → PUB-208, including the apiPublishDue run above). They are
+  // FAILED with alertedAt set; the ledger keeps each one to a single report.
+  const stuckIds = new Set(stuck.map((d) => d.id));
+  const gaveUp = (await prisma.scheduledPost.findMany({
+    where: { organizationId: orgId, status: "FAILED", alertedAt: { gte: new Date(now - FAILED_LOOKBACK_MS) } },
+    take: 200,
+  })).filter((d) => !stuckIds.has(d.id));
+
+  type Row = (typeof late)[number];
+  const candidates: { d: Row; kind: DigestKind; reason: string }[] = [
+    ...missedPosts.map((d) => ({ d, kind: "missed" as const, reason: missedWhy(d) })),
+    ...stuck.map((d) => ({ d, kind: "stuck" as const, reason: `Publishing started ${nyTime(d.claimedAt)} and never reported back. Check the network: if the post is not there, press Retry.` })),
+    ...gaveUp.map((d) => ({ d, kind: "failed" as const, reason: d.lastError || "Publishing failed." })),
+  ];
+  const fresh = new Set((await newFailures(store, candidates.map((c) => failedOf(c.d)), now)).map((p) => p.id));
+  const postsToSend = candidates.filter((c) => fresh.has(c.d.id));
 
   const unconfirmed = await prisma.scheduledPost.findMany({
     where: { organizationId: orgId, status: "POSTED", verifiedAt: null, postedAt: { gt: new Date(now - 14 * 86400000) } },
@@ -721,43 +707,81 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
 
   for (const id of touched) await rollUp(id);
 
-  // One email per sign-out lasting more than 10 minutes, per network — for
-  // the workspace browser and for each company's own browser (v4.42.0).
+  // Sign-outs lasting more than 10 minutes, per network — for the workspace
+  // browser and for each company's own browser (v4.42.0). v0.7.5: one row each
+  // in the digest instead of one email each; still once per sign-out (emailedFor).
   const routed = await clientRoutedIds(orgId);
+  const signOuts: { pubClient: string | null; st: PublisherState; key: "x" | "linkedin"; ids: (string | null)[]; entry: DigestEntry }[] = [];
   for (const pubClient of [null, ...routed] as (string | null)[]) {
-  const st = await getPublisherState(orgId, pubClient);
-  const whose = pubClient
-    ? `${(await prisma.client.findFirst({ where: { id: pubClient }, select: { name: true } }))?.name || "The client"}'s own publishing browser`
-    : "the publishing browser";
-  let changed = false;
-  for (const [key, label] of [["x", "X"], ["linkedin", "LinkedIn"]] as const) {
-    const s = st[key];
-    if (!s.signedIn && s.signedOutSince && s.emailedFor !== s.signedOutSince && now - new Date(s.signedOutSince).getTime() > 10 * 60000) {
-      const pending = await prisma.scheduledPost.count({
-        where: {
-          organizationId: orgId,
-          status: "SCHEDULED",
-          platform: key === "x" ? "TWITTER" : "LINKEDIN",
-          ...(pubClient ? { clientId: pubClient } : routed.length ? { OR: [{ clientId: null }, { clientId: { notIn: routed } }] } : {}),
-        },
-      });
-      if (pending === 0) continue; // nothing waiting; the LinkedIn watchdog already covers collection
-      if (
-        await alertTeam(
-          orgId,
-          `${label} signed you out — ${pending} scheduled post${pending === 1 ? " is" : "s are"} on hold`,
-          `<p>${label} signed ${whose} out at <b>${nyTime(new Date(s.signedOutSince))}</b>.</p>
-           <p>On the publishing computer the ${label} login page is already open — 1Password fills it in one click.</p>`,
-          "SIGNED_OUT",
-          { href: publishLink("/publishing/calendar", { client: pubClient }), label: "Open the calendar in Publish" },
-        )
-      ) {
-        s.emailedFor = s.signedOutSince;
-        changed = true;
+    const st = await getPublisherState(orgId, pubClient);
+    for (const [key, label] of [["x", "X"], ["linkedin", "LinkedIn"]] as const) {
+      const s = st[key];
+      if (!s.signedIn && s.signedOutSince && s.emailedFor !== s.signedOutSince && now - new Date(s.signedOutSince).getTime() > 10 * 60000) {
+        const waiting = await prisma.scheduledPost.findMany({
+          where: {
+            organizationId: orgId,
+            status: "SCHEDULED",
+            platform: key === "x" ? "TWITTER" : "LINKEDIN",
+            ...(pubClient ? { clientId: pubClient } : routed.length ? { OR: [{ clientId: null }, { clientId: { notIn: routed } }] } : {}),
+          },
+          select: { clientId: true },
+        });
+        if (!waiting.length) continue; // nothing waiting; the LinkedIn watchdog already covers collection
+        const whose = pubClient ? "the company's own publishing browser" : "the publishing browser";
+        signOuts.push({
+          pubClient, st, key,
+          ids: pubClient ? [pubClient] : waiting.map((w) => w.clientId),
+          entry: {
+            kind: "signed_out",
+            company: "", // filled below, once the names are loaded
+            network: label,
+            reason: `${label} signed ${whose} out. On the publishing computer the ${label} login page is already open — 1Password fills it in one click.`,
+            link: publishLink("/publishing/calendar", { client: pubClient }),
+            when: `since ${nyTime(new Date(s.signedOutSince))}`,
+            pending: waiting.length,
+          },
+        });
       }
     }
   }
-  if (changed) await savePublisherState(orgId, st, pubClient);
+
+  if (postsToSend.length || signOuts.length) {
+    const ids = new Set<string>();
+    for (const c of postsToSend) if (c.d.clientId) ids.add(c.d.clientId);
+    for (const o of signOuts) for (const id of o.ids) if (id) ids.add(id);
+    const names = new Map(
+      (await prisma.client.findMany({ where: { id: { in: [...ids] } }, select: { id: true, name: true } })).map((c) => [c.id, c.name] as const),
+    );
+    const nameOf = (id: string | null | undefined) => (id && names.get(id)) || "—";
+    for (const o of signOuts) {
+      const list = [...new Set(o.ids.map(nameOf))].sort();
+      o.entry.company = list.join(", ") || "—";
+    }
+    const entries: DigestEntry[] = [
+      ...postsToSend.map(({ d, kind, reason }) => ({
+        kind,
+        company: nameOf(d.clientId),
+        network: NET_LABEL[d.platform as Net] ?? d.platform,
+        reason,
+        link: publishLink("/publishing/calendar", { client: d.clientId, item: d.contentId }),
+        when: `scheduled ${nyTime(d.scheduledAt)}`,
+        excerpt: (d.text || "").split("\n")[0].slice(0, 100),
+      })),
+      ...signOuts.map((o) => o.entry),
+    ];
+    const sent = await alertTeam(orgId, digestSubject(entries), digestHtml(entries), "SWEEP_DIGEST", {
+      href: publishLink("/publishing/calendar"),
+      label: "Open the calendar in Publish",
+    });
+    if (sent) {
+      await markAlerted(store, postsToSend.map((c) => failedOf(c.d)), now);
+      // Re-read before writing: a heartbeat may have updated the state meanwhile.
+      for (const pubClient of new Set(signOuts.map((o) => o.pubClient))) {
+        const cur = await getPublisherState(orgId, pubClient);
+        for (const o of signOuts) if (o.pubClient === pubClient) cur[o.key].emailedFor = o.st[o.key].signedOutSince;
+        await savePublisherState(orgId, cur, pubClient);
+      }
+    }
   }
 
   return { missed, failed, verified };

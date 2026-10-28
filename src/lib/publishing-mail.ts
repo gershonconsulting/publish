@@ -53,6 +53,10 @@ export const PUBLISH_MAILS = {
   SIGNED_OUT: { no: "PUB-209", audience: "internal", title: "Network signed out — posts on hold" },
   AUTOPILOT_REWROTE: { no: "PUB-210", audience: "internal", title: "Autopilot rewrote posts from comments" },
   AUTOPILOT_SCHEDULE_FAILED: { no: "PUB-211", audience: "internal", title: "Autopilot could not schedule posts" },
+  // v0.7.5 (Publish): ONE email per sweep run with every post that did not go out
+  // and every network sign-out. In Publish it replaces PUB-205…209, which are no
+  // longer sent on their own (kept here so the numbers are never reused).
+  SWEEP_DIGEST: { no: "PUB-212", audience: "internal", title: "Posts that did not go out (digest)" },
   // A validation email (1xx) that goes to the team because the company has no
   // reviewer is re-labelled internal at send time, keeping its number.
 } as const satisfies Record<string, MailDef>;

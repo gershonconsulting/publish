@@ -9,7 +9,8 @@ import { buildCompetitiveReport, renderCompetitive, competitiveSubject } from ".
 import { buildIntelligenceReport, renderIntelligence, intelligenceSubject, INTEL_TO } from "./intelligence";
 import { criticalUnchanged, saveCritical } from "@/lib/alert-dedupe";
 import { orgAlertStore } from "@/lib/publishing";
-import { deliver, type DeliveryResult, type OpsKind } from "./shell";
+import { inventoryChanged, inventorySig, saveInventorySig } from "@/lib/sweep-digest";
+import { deliver, OPS_TO, type DeliveryResult, type OpsKind } from "./shell";
 
 export const OPS_KINDS: OpsKind[] = ["posting", "content", "competitive", "intelligence"];
 
@@ -47,13 +48,22 @@ export async function sendOps(opts: { kinds?: OpsKind[]; force?: boolean; to?: s
       let b = await buildOps(kind, org);
       // v0.6.1: Content report — "under half a week" in full only when the set of companies changed.
       let critIds: string[] | null = null;
+      let sig: string | null = null;
       if (kind === "content") {
         const r = b.data as ContentReport;
+        // v0.7.5: a report with warnings is not sent at all when they are the same as in the
+        // last one sent (the "8 under half a week" repeated for 6+ days). All-clear reports still go daily.
+        sig = inventorySig(r.rows.filter((x) => x.level !== "ok" || x.overdueReviews || x.overdueChanges));
+        if (sig && !opts.force && !opts.to && !(await inventoryChanged(orgAlertStore(org), "ops", sig))) {
+          out.push({ kind, subject: b.subject, to: process.env.REPORT_TO || OPS_TO, sent: false, skipped: "no change since the last one sent" });
+          continue;
+        }
         critIds = r.rows.filter((x) => x.level === "critical").map((x) => x.clientId);
         if (await criticalUnchanged(orgAlertStore(org), "ops", critIds)) b = { ...b, subject: contentSubject(r, { unchanged: true }), html: renderContent(r, { unchanged: true }) };
       }
       const res = await deliver(kind, b.dayKey, b.subject, b.html, { force: opts.force, to: opts.to, defaultTo: defaultTo(kind) });
       if (critIds && res.sent) await saveCritical(orgAlertStore(org), "ops", critIds);
+      if (sig != null && res.sent) await saveInventorySig(orgAlertStore(org), "ops", sig);
       out.push(res);
     } catch (e) {
       out.push({ kind, sent: false, error: e instanceof Error ? e.message : String(e) });

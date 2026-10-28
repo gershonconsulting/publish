@@ -746,3 +746,94 @@ export async function status(orgId: string, now = new Date()) {
   );
   return { settings: s, enabled, window: { label: w.label, first: w.days[0] || null, last: w.days[w.days.length - 1] || null }, clients: perClient, internal: all };
 }
+
+// ── v0.9.0 Intelligence → "Fill the gap" ─────────────────────────────────────
+//
+// Olivier, 2026-10-28: Cloudflare AI must help CREATE the content. From the
+// dashboard / Intelligence, a company short of validated posts gets AI drafts
+// written for its EMPTY posting days (the runway's gaps), with the same
+// copywriter, Knowledge Base, ICP rotation, competitor gaps and picture as
+// Autopilot. They are DRAFTS (createdBy "Intelligence"): nothing is submitted,
+// approved or published by this — the team reviews them in Content & review
+// (spec §14.11: no autonomous approval or publication from an AI suggestion).
+
+export const INTELLIGENCE = "Intelligence";
+
+export type FillResult = { written: number; remaining: number; errors: string[]; items: { id: string; day: string; title: string }[] };
+
+const FILL_LOCK = "intel_fill_lock:";
+
+export async function fillGaps(orgId: string, clientId: string, days: string[], budget = 2): Promise<FillResult> {
+  const out: FillResult = { written: 0, remaining: 0, errors: [], items: [] };
+  const c = await prisma.client.findFirst({
+    where: { id: clientId, organizationId: orgId, clientType: { in: AUTOPILOT_TYPES }, archivedAt: null },
+    select: { id: true, name: true, industry: true, website: true, notes: true },
+  });
+  if (!c) return { ...out, errors: ["This company is not a CAMPAIGN or INTERNAL company of this workspace."] };
+
+  // One fill at a time per company (two tabs must not write the same day twice).
+  const lock = FILL_LOCK + clientId;
+  const now = Date.now();
+  let locked = false;
+  try {
+    await prisma.orgSetting.create({ data: { organizationId: orgId, key: lock, value: String(now) } });
+    locked = true;
+  } catch {
+    const r = await prisma.orgSetting.updateMany({ where: { organizationId: orgId, key: lock, value: { lt: String(now - 180000) } }, data: { value: String(now) } });
+    locked = r.count === 1;
+  }
+  if (!locked) return { ...out, remaining: days.length, errors: ["Already writing for this company — one moment."] };
+
+  try {
+    const s = await getAutopilotSettings(orgId);
+    // Re-check: a day is free only if NO post of this company is planned on it.
+    const wanted = Array.from(new Set(days.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)))).sort();
+    if (!wanted.length) return out;
+    const from = etInstant(wanted[0], "00:00");
+    const to = new Date(etInstant(wanted[wanted.length - 1], "00:00").getTime() + DAY);
+    const taken = new Set(
+      (await prisma.contentItem.findMany({
+        where: { organizationId: orgId, clientId, status: { not: "FAILED" }, scheduledAt: { gte: from, lt: to } },
+        select: { scheduledAt: true },
+      })).map((r) => etYmd(r.scheduledAt!)),
+    );
+    const todo = wanted.filter((d) => !taken.has(d) && etInstant(d, s.postTime).getTime() > now + 3600000);
+    const chunk = todo.slice(0, Math.max(1, Math.min(3, budget)));
+    out.remaining = todo.length;
+    if (!chunk.length) return out;
+
+    const xLimit = xMax(await getSettings(orgId));
+    const platforms = await networksFor(orgId, clientId);
+    const planned = await prisma.contentItem.findMany({
+      where: { organizationId: orgId, clientId, createdAt: { gte: new Date(now - 75 * DAY) } },
+      select: { title: true },
+      orderBy: { createdAt: "asc" },
+    });
+    let drafts: Draft[] = [];
+    try {
+      drafts = await writePosts(orgId, c, chunk, planned.map((p) => p.title || "").filter(Boolean), xLimit);
+    } catch (e) {
+      out.errors.push(e instanceof Error ? e.message.slice(0, 200) : "The AI did not answer.");
+      return out;
+    }
+    if (!drafts.length) out.errors.push("The AI answer could not be read — try again.");
+    for (let i = 0; i < drafts.length && i < chunk.length; i++) {
+      const d = drafts[i];
+      const { text, textX } = finalTexts(d, xLimit);
+      const item = await prisma.contentItem.create({
+        data: {
+          organizationId: orgId, clientId, title: d.title || `${c.name} — ${chunk[i]}`, text, textX,
+          platforms, status: "DRAFT", scheduledAt: etInstant(chunk[i], s.postTime), createdBy: INTELLIGENCE,
+        },
+      });
+      await addEvent(orgId, item.id, 1, "comment", "team", INTELLIGENCE, `AI draft (Cloudflare Workers AI) written by Intelligence to fill the empty posting day ${chunk[i]}. Review before submitting. Picture idea: ${d.image}`);
+      await attachPicture(orgId, item.id, d.image || d.title || c.name).catch(() => false);
+      out.written++;
+      out.remaining--;
+      out.items.push({ id: item.id, day: chunk[i], title: d.title || "" });
+    }
+    return out;
+  } finally {
+    await prisma.orgSetting.deleteMany({ where: { organizationId: orgId, key: lock } }).catch(() => null);
+  }
+}

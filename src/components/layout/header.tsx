@@ -29,6 +29,7 @@ const SECTIONS: [string, string][] = [
   ["/reports", "Portfolio"],
   ["/publishing", "Publishing"],
   ["/extension", "Publish"],
+  ["/intelligence", "Workspace"],
   ["/logs", "System"],
   ["/errors", "System"],
   ["/admin", "Workspace"],

@@ -82,6 +82,8 @@ export type Runway = {
   nextMonth: PeriodCover;
   /** First posting slot with nothing for it, or null when everything to the end of next month is covered. */
   firstGap: string | null;
+  /** v0.9.0: every posting slot still empty to the end of next month (local dates, ascending). */
+  gaps: string[];
   /** Calendar days from today until the first gap (or to the end of next month when there is none). */
   daysCovered: number;
   /** True when there is no gap before the end of next month. */
@@ -155,6 +157,7 @@ export function computeRunway(input: {
     thisMonth: period(from, endThis),
     nextMonth: period(addDays(endThis, 1), endNext),
     firstGap: gap ? gap.date : null,
+    gaps: slots.filter((s) => !s.by).map((s) => s.date),
     daysCovered: Math.max(0, daysCovered),
     coveredToHorizon: !gap,
     neededIn7,

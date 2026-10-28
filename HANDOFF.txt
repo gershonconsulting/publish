@@ -11,6 +11,34 @@ SPEC: docs/THREE-PLATFORM-SPLIT.md (sections 2, 14-17 for this product).
 SIBLINGS: social.gershon.ai (repo social), Social Tracking (socialtracking.gershon.ai).
 
 STATUS
+[BUILT] v0.9.0 (2026-10-28) - branch feat/v0.9.0-dashboard-intelligence-settings - NOT DEPLOYED YET.
+  Olivier 2026-10-28: "the dashboard is a disaster" / "missing intelligence (Cloudflare AI)" /
+  "missing a Settings menu - several computers, some with a working extension, some not".
+  ✅ /dashboard rebuilt: Publishing health score 0-100 (lib/publish-score.ts, pure + tested:
+       coverage 40 / approvals 20 / delivery 25 / connections 15, unmeasurable parts left out),
+       Intelligence briefing card, "Do this now" action cards, charts (coverage bars per company
+       with Fill buttons, pipeline funnel, next 7 days, delivery donut, approval aging,
+       14-day trend, readiness + computers). Old v0.6.0 tables under "Show details"
+       (components/publish/dashboard-details.tsx). Charts: hand-drawn SVG (components/publish/charts.tsx).
+  ✅ Intelligence menu /intelligence (Cloudflare Workers AI): Analysis, Suggestions, Chat, Create content.
+       lib/intelligence.ts: facts from the deterministic dashboard only; links built server-side;
+       cached in OrgSetting publish_intel:<client|all>:<window> (6 h + data hash); rule-based
+       fallback labelled as such. APIs: /api/intelligence (GET cached, POST build),
+       /api/intelligence/chat, /api/intelligence/fill-gap (GET empty days, POST 2 AI drafts per call).
+       Fill the gap = lib/autopilot.ts fillGaps(): Autopilot's writer + pictures, createdBy
+       "Intelligence", status DRAFT on the empty day - never submitted/approved/published.
+  ✅ Settings /settings (old /settings?... OAuth returns still redirect to Connections):
+       This computer (name; publishes yes/no per computer = localStorage publish_computer_mode;
+       extension here: working / not working / not installed), Publishing computers (Working /
+       Old version / Signed out / Offline; rename -> OrgSetting publish_browser_name:<id>),
+       Intelligence status + live test (model read-only: the setting row is shared with Social).
+  ✅ Extension 0.2.1: PONG/HELLO carry the Chrome's pb_ id so Settings knows "this computer".
+  ✅ Checks: tsc, all 4 test files pass (publish-score new), @cloudflare/next-on-pages build OK,
+       local preview with mocked data: no console errors.
+  ❌ Merge + deploy (deploy/publish branch in the social repo).
+  ❌ Refresh the extension folder on Olivier's computer to 0.2.1 (self-reloads within ~20 min).
+  ❌ Phone layout: the dark sidebar is fixed 248px on every page (pre-existing; unified-design work).
+
 [NOTE] v0.4.0 (numbered PUB emails) and v0.5.0 (publishing engine + crons moved here from
        Social) were committed by another session - see git log.
 [BUILT] v0.6.0 (2026-10-26) - NOT DEPLOYED YET - awaiting Olivier's approval.

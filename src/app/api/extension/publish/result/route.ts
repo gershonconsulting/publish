@@ -18,10 +18,9 @@ import { deliveryScope } from "@/lib/publish-caller";
 import { refusedStatus, resolvePublishExtensionCaller } from "@/lib/publish-extension-caller";
 import prisma from "@/lib/db-raw";
 import {
-  MAX_ATTEMPTS, NET_LABEL, addEvent, alertTeam, esc, getPublisherState, quote, rollUp, savePublisherState, type Net,
+  MAX_ATTEMPTS, NET_LABEL, addEvent, getPublisherState, rollUp, savePublisherState, type Net,
 } from "@/lib/publishing";
 import { learnFromResult, validBrowserId } from "@/lib/publish-browsers";
-import { publishLink } from "@/lib/publishing-mail";
 
 function postIdFrom(url: string | null | undefined): string | null {
   const m = (url || "").match(/\/status(?:es)?\/(\d+)|urn:li:(?:activity|share|ugcPost):(\d+)|activity-(\d+)/);
@@ -65,16 +64,8 @@ export async function POST(req: NextRequest) {
         data: { status, claimedAt: null, lastError: error || "Publishing failed before posting.", alertedAt: giveUp ? now : null },
       });
       st.lastError = error;
-      if (giveUp) {
-        await alertTeam(
-          caller.orgId,
-          `A ${NET_LABEL[d.platform as Net] ?? d.platform} post failed to publish`,
-          `<p>After ${d.attempts} tries this post could not be published on ${NET_LABEL[d.platform as Net] ?? d.platform}.</p>${quote(d.text)}
-           <p>Reason: ${esc(error || "unknown")}</p><p>Nothing was posted. Fix the cause, then press Retry.</p>`,
-          "POST_FAILED_BROWSER",
-          { href: publishLink("/publishing/calendar", { client: d.clientId, item: d.contentId }), label: "Open the post in Publish" },
-        );
-      }
+      // v0.7.5: no email here any more — the FAILED post (alertedAt set) goes into
+      // the next sweep's single digest (PUB-212, "N posts did not go out today").
     }
     await savePublisherState(caller.orgId, st, caller.clientId);
     await learnFromResult(caller.orgId, validBrowserId(b.browser), d.platform, d.target, b.outcome || "", error).catch(() => null);

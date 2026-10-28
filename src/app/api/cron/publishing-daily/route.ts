@@ -4,7 +4,7 @@ export const runtime = "edge";
  *   1. reminds each client's reviewer about posts waiting > 2 days;
  *   2. emails the team the content-inventory warnings (one week of approved
  *      content per client) and the overdue reviews — only when something
- *      needs attention, once a day.
+ *      needs attention, once a day, and (v0.7.5) only when that changed.
  * POST, Bearer CRON_SECRET. ?force=1 resends today's team email.
  * Triggered by .github/workflows/publishing-daily.yml.
  */
@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
       out[orgId] = {
         reminders,
         teamEmail: digest.sent,
+        unchanged: !!digest.unchanged, // v0.7.5: same state as the last email sent → not resent
         warnings: digest.rows.filter((r) => r.level !== "ok").map((r) => ({ client: r.name, days: r.coverageDays, level: r.level })),
       };
     }

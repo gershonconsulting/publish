@@ -25,6 +25,7 @@ import { objectivesFor } from "@/lib/campaigns/objectives";
 import { alertTeam, orgAlertStore, esc, getTarget, quote, reviewToken, reviewUrl, sendMail, PUBLISHING_CLIENT_WHERE } from "@/lib/publishing";
 import { publishLink } from "@/lib/publishing-mail";
 import { criticalUnchanged, noChangeLine, saveCritical } from "@/lib/alert-dedupe";
+import { inventoryChanged, inventorySig, saveInventorySig } from "@/lib/sweep-digest";
 
 export const TARGET_DAYS = 7;
 export const REVIEW_REMIND_AFTER_DAYS = 2;
@@ -169,13 +170,25 @@ function days(n: number): string {
   return `${n} day${n === 1 ? "" : "s"}`;
 }
 
-/** The team's daily inventory email — only when something needs attention, once a day. */
-export async function teamDigest(orgId: string, now = Date.now(), force = false): Promise<{ sent: boolean; rows: InventoryRow[] }> {
+/** The team's daily inventory email — only when something needs attention, at most once a day, and (v0.7.5) only when that changed. */
+export async function teamDigest(orgId: string, now = Date.now(), force = false): Promise<{ sent: boolean; rows: InventoryRow[]; unchanged?: boolean }> {
   const rows = await inventory(orgId, now);
   const attention = rows.filter((r) => r.level !== "ok" || r.overdueReviews || r.overdueChanges);
   const today = new Date(now).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-  if (!attention.length) return { sent: false, rows };
+  // v0.7.5: only when the state changed since the last email SENT (same
+  // companies, same levels, same overdue flags → no email; the board shows it live).
+  const store = orgAlertStore(orgId);
+  const sig = inventorySig(attention);
+  if (!attention.length) {
+    // All clear: forget the last state, so the next problem is always emailed.
+    if (await inventoryChanged(store, "team", sig)) await saveInventorySig(store, "team", sig);
+    return { sent: false, rows };
+  }
   if (!force && (await getStamp(orgId, "publishing_digest_day")) === today) return { sent: false, rows };
+  if (!force && !(await inventoryChanged(store, "team", sig))) {
+    await setStamp(orgId, "publishing_digest_day", today);
+    return { sent: false, rows, unchanged: true };
+  }
 
   const color = { critical: "#b91c1c", low: "#b45309", ok: "#047857" } as const;
   const linkStyle = "color:#b91c1c;font-weight:bold;text-decoration:none";
@@ -197,7 +210,6 @@ export async function teamDigest(orgId: string, now = Date.now(), force = false)
   const criticalIds = attention.filter((r) => r.level === "critical").map((r) => r.clientId);
   const critical = criticalIds.length;
   // v0.6.1: the "under half a week" headline only when the set of companies changed since the last email.
-  const store = orgAlertStore(orgId);
   const unchanged = await criticalUnchanged(store, "team", criticalIds);
   const sent = await alertTeam(
     orgId,
@@ -211,6 +223,7 @@ export async function teamDigest(orgId: string, now = Date.now(), force = false)
     { href: publishLink("/publishing"), label: "Open Publish" },
   );
   if (sent) await saveCritical(store, "team", criticalIds);
+  if (sent) await saveInventorySig(store, "team", sig);
   if (sent) await setStamp(orgId, "publishing_digest_day", today);
   return { sent, rows };
 }

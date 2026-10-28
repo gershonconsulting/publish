@@ -11,6 +11,14 @@ SPEC: docs/THREE-PLATFORM-SPLIT.md (sections 2, 14-17 for this product).
 SIBLINGS: social.gershon.ai (repo social), Social Tracking (socialtracking.gershon.ai).
 
 STATUS
+[2026-10-28] v0.7.4 (nightly) - PR #1 "one alert per failed post" rebased on main v0.7.3,
+       branch nightly/2026-10-28-publish-alerts-rebase (replaces #1). ✅ ready to test:
+       src/lib/alert-dedupe.ts + tests/alert-dedupe.test.mts, sweep() groups MISSED/stuck
+       alerts (once per post), team digest + Content Ready report show "under half a week"
+       only when the set changed. publishing.ts / publishing-inventory.ts / reports/ops were
+       unchanged on main since #1's base, so #1's logic applies as-is. ❌ not built or tested
+       in the nightly run (no clone): run npx tsc --noEmit + npx tsx --test tests/alert-dedupe.test.mts.
+       ❌ deploy awaiting Olivier's OK.
 [NOTE] v0.4.0 (numbered PUB emails) and v0.5.0 (publishing engine + crons moved here from
        Social) were committed by another session - see git log.
 [BUILT] v0.6.0 (2026-10-26) - NOT DEPLOYED YET - awaiting Olivier's approval.

@@ -27,6 +27,7 @@
  * NEVER DOUBLE-POSTS: a delivery is retried only when the extension reports
  * it failed BEFORE clicking Post.
  */
+import { markAlerted, newFailures, type AlertStore, type FailedPost } from "@/lib/alert-dedupe";
 import type { ClientType } from "@prisma/client";
 import prisma from "@/lib/db-raw";
 import { siteUrl } from "@/lib/site";
@@ -49,7 +50,7 @@ export const ITEM_STATUSES = [
   "DRAFT", "IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "SCHEDULED", "PUBLISHED", "PARTIAL", "FAILED",
 ] as const;
 
-// ── Settings ─────────────────────────────────────────────────────────────────
+// ── Settings ─────────────────────────────────────────────────────────────────────────────
 
 const SETTINGS_KEY = "publishing_settings";
 const PUBLISHER_KEY = "publisher_state";
@@ -70,7 +71,7 @@ export type PublishSettings = {
 export const READY_EMAIL_DEFAULT = "social@gershonconsulting.com";
 export const DEFAULT_SETTINGS: PublishSettings = { enabled: true, longPostsX: false, graceMinutes: 120, alertEmail: null, requireImage: true, readyEmail: READY_EMAIL_DEFAULT };
 
-// ── Pictures ─────────────────────────────────────────────────────────────────
+// ── Pictures ─────────────────────────────────────────────────────────────────────────────
 
 /** One picture per post, the same on LinkedIn and X (Olivier, 2026-10-11). */
 export const MAX_IMAGES = 1;
@@ -213,7 +214,7 @@ export function liveStatus(st: PublisherState): { overall: Live; x: Live; linked
   };
 }
 
-// ── Text rules ───────────────────────────────────────────────────────────────
+// ── Text rules ───────────────────────────────────────────────────────────────────────────
 
 /** X's count: every URL is 23, everything else one per code point. */
 export function xLength(text: string): number {
@@ -395,7 +396,7 @@ export async function resolveReviewToken(token: string): Promise<{ orgId: string
   return { orgId: row.organizationId, clientId: row.key.slice("review_token:".length) };
 }
 
-// ── Thread ───────────────────────────────────────────────────────────────────
+// ── Thread ───────────────────────────────────────────────────────────────────────────────
 
 export async function addEvent(
   orgId: string,
@@ -411,7 +412,7 @@ export async function addEvent(
   });
 }
 
-// ── Email ────────────────────────────────────────────────────────────────────
+// ── Email ────────────────────────────────────────────────────────────────────────────────
 
 export function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
@@ -481,7 +482,7 @@ export function quote(text: string): string {
   return `<blockquote style="border-left:3px solid #ddd;margin:8px 0;padding:4px 12px;color:#333;white-space:pre-wrap">${esc(text.slice(0, 1200))}</blockquote>`;
 }
 
-// ── Scheduling ───────────────────────────────────────────────────────────────
+// ── Scheduling ───────────────────────────────────────────────────────────────────────────
 
 /** Create one delivery per network for an approved item. Returns problems, if any. */
 export async function scheduleItem(orgId: string, itemId: string, when: Date): Promise<string[]> {
@@ -589,10 +590,26 @@ export async function rollUp(itemId: string): Promise<void> {
   }
 }
 
-// ── Sweep ────────────────────────────────────────────────────────────────────
+// ── Sweep ────────────────────────────────────────────────────────────────────────────────
 
 function norm(s: string | null | undefined): string {
   return (s || "").replace(/https?:\/\/\S+/gi, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim().toLowerCase();
+}
+
+function failedOf(d: { id: string; contentId: string | null; platform: string; target: string | null; scheduledAt: Date }): FailedPost {
+  return { id: d.id, contentId: d.contentId, platform: d.platform, target: d.target, scheduledAtMs: d.scheduledAt.getTime() };
+}
+
+/** Alert ledger lives in the existing org_settings table (no new table). */
+export function orgAlertStore(orgId: string): AlertStore {
+  return {
+    async get(key) {
+      return (await prisma.orgSetting.findUnique({ where: { organizationId_key: { organizationId: orgId, key } } }))?.value ?? null;
+    },
+    async set(key, value) {
+      await prisma.orgSetting.upsert({ where: { organizationId_key: { organizationId: orgId, key } }, create: { organizationId: orgId, key, value }, update: { value } });
+    },
+  };
 }
 
 export async function sweep(orgId: string): Promise<{ missed: number; failed: number; verified: number }> {
@@ -610,6 +627,7 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
   const late = await prisma.scheduledPost.findMany({
     where: { organizationId: orgId, status: "SCHEDULED", scheduledAt: { lt: new Date(now - settings.graceMinutes * 60000) } },
   });
+  const missedPosts: typeof late = [];
   for (const d of late) {
     await prisma.scheduledPost.update({
       where: { id: d.id },
@@ -617,14 +635,30 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
     });
     missed++;
     if (d.contentId) touched.add(d.contentId);
-    await alertTeam(
-      orgId,
-      `A ${NET_LABEL[d.platform as Net] ?? d.platform} post did not go out`,
-      `<p>Scheduled for <b>${nyTime(d.scheduledAt)}</b> on <b>${NET_LABEL[d.platform as Net] ?? d.platform}</b> — <b>not published</b>.</p>${quote(d.text)}
-       <p>Reason: ${esc(d.lastError || (d.clientId && routedEarly.has(d.clientId) ? "the client's own publishing browser (Chrome with the Social extension) was offline or signed out." : "the publishing browser (Chrome with the Social extension) was offline or signed out."))}</p>`,
-      "POST_MISSED",
-      { href: publishLink("/publishing/calendar", { client: d.clientId, item: d.contentId }), label: "Open the post in Publish" },
-    );
+    missedPosts.push(d);
+  }
+  // v0.6.1 — one email per sweep for all new misses, and never again for a post already alerted.
+  const store = orgAlertStore(orgId);
+  const freshMissed = new Set((await newFailures(store, missedPosts.map(failedOf), now)).map((p) => p.id));
+  const missedToSend = missedPosts.filter((d) => freshMissed.has(d.id));
+  if (missedToSend.length) {
+    const lines = missedToSend.map((d) => {
+      const net = NET_LABEL[d.platform as Net] ?? d.platform;
+      const why = d.lastError || (d.clientId && routedEarly.has(d.clientId) ? "the client's own publishing browser (Chrome with the Social extension) was offline or signed out." : "the publishing browser (Chrome with the Social extension) was offline or signed out.");
+      return `<p>Scheduled for <b>${nyTime(d.scheduledAt)}</b> on <b>${net}</b> — <b>not published</b>.</p>${quote(d.text)}<p>Reason: ${esc(why)}</p>`;
+    });
+    const one = missedToSend[0];
+    if (
+      await alertTeam(
+        orgId,
+        missedToSend.length === 1
+          ? `A ${NET_LABEL[one.platform as Net] ?? one.platform} post did not go out`
+          : `${missedToSend.length} scheduled posts did not go out`,
+        lines.join('<hr style="border:0;border-top:1px solid #eee;margin:12px 0">') + `<p style="color:#666;font-size:12px">Each post is reported once. You will hear about it again only if it fails again after a Retry, or after 7 days.</p>`,
+        "POST_MISSED",
+        { href: publishLink("/publishing/calendar", missedToSend.length === 1 ? { client: one.clientId, item: one.contentId } : {}), label: missedToSend.length === 1 ? "Open the post in Publish" : "Open the calendar in Publish" },
+      )
+    ) await markAlerted(store, missedToSend.map(failedOf), now);
   }
 
   const stuck = await prisma.scheduledPost.findMany({
@@ -637,13 +671,23 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
     });
     failed++;
     if (d.contentId) touched.add(d.contentId);
-    await alertTeam(
-      orgId,
-      `A ${NET_LABEL[d.platform as Net] ?? d.platform} post may not have gone out`,
-      `<p>Publishing started ${nyTime(d.claimedAt)} and never reported back.</p>${quote(d.text)}<p>Check the network: if it is not there, press Retry.</p>`,
-      "POST_STUCK",
-      { href: publishLink("/publishing/calendar", { client: d.clientId, item: d.contentId }), label: "Open the post in Publish" },
-    );
+  }
+  const freshStuck = new Set((await newFailures(store, stuck.map(failedOf), now)).map((p) => p.id));
+  const stuckToSend = stuck.filter((d) => freshStuck.has(d.id));
+  if (stuckToSend.length) {
+    const one = stuckToSend[0];
+    if (
+      await alertTeam(
+        orgId,
+        stuckToSend.length === 1
+          ? `A ${NET_LABEL[one.platform as Net] ?? one.platform} post may not have gone out`
+          : `${stuckToSend.length} posts may not have gone out`,
+        stuckToSend.map((d) => `<p>Publishing on ${NET_LABEL[d.platform as Net] ?? d.platform} started ${nyTime(d.claimedAt)} and never reported back.</p>${quote(d.text)}`).join("") +
+          `<p>Check the network: if a post is not there, press Retry.</p>`,
+        "POST_STUCK",
+        { href: publishLink("/publishing/calendar", stuckToSend.length === 1 ? { client: one.clientId, item: one.contentId } : {}), label: stuckToSend.length === 1 ? "Open the post in Publish" : "Open the calendar in Publish" },
+      )
+    ) await markAlerted(store, stuckToSend.map(failedOf), now);
   }
 
   const unconfirmed = await prisma.scheduledPost.findMany({

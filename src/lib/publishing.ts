@@ -29,7 +29,7 @@
  * it failed BEFORE clicking Post.
  */
 import { markAlerted, newFailures, type AlertStore, type FailedPost } from "@/lib/alert-dedupe";
-import { digestHtml, digestSubject, type DigestEntry, type DigestKind } from "@/lib/sweep-digest";
+import { applyOfflineDailyCap, digestHtml, digestSubject, lastOfflineDigestDay, saveOfflineDigestDay, type DigestEntry, type DigestKind } from "@/lib/sweep-digest";
 import type { ClientType } from "@prisma/client";
 import prisma from "@/lib/db-raw";
 import { siteUrl } from "@/lib/site";
@@ -104,6 +104,8 @@ export const LIVE_WINDOW_MS = 15 * 60 * 1000;
 const CLAIM_TIMEOUT_MS = 20 * 60 * 1000;
 /** v0.7.5: a post that gave up (FAILED) within this window goes into the next sweep digest. */
 const FAILED_LOOKBACK_MS = 24 * 3600 * 1000;
+/** v0.7.6: a missed post held back by the one-email-per-day cap is picked up again within this window. */
+const MISSED_LOOKBACK_MS = 48 * 3600 * 1000;
 export const MAX_ATTEMPTS = 3;
 
 async function readJson<T extends object>(orgId: string, key: string, fallback: T): Promise<T> {
@@ -666,15 +668,23 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
     where: { organizationId: orgId, status: "FAILED", alertedAt: { gte: new Date(now - FAILED_LOOKBACK_MS) } },
     take: 200,
   })).filter((d) => !stuckIds.has(d.id));
+  // v0.7.6: MISSED posts held back by the daily PUB-205 cap (not yet in the ledger) are retried.
+  const lateIds = new Set(late.map((d) => d.id));
+  const heldMissed = (await prisma.scheduledPost.findMany({
+    where: { organizationId: orgId, status: "MISSED", alertedAt: { gte: new Date(now - MISSED_LOOKBACK_MS) } },
+    take: 200,
+  })).filter((d) => !lateIds.has(d.id));
 
   type Row = (typeof late)[number];
   const candidates: { d: Row; kind: DigestKind; reason: string }[] = [
-    ...missedPosts.map((d) => ({ d, kind: "missed" as const, reason: missedWhy(d) })),
+    ...[...missedPosts, ...heldMissed].map((d) => ({ d, kind: "missed" as const, reason: missedWhy(d) })),
     ...stuck.map((d) => ({ d, kind: "stuck" as const, reason: `Publishing started ${nyTime(d.claimedAt)} and never reported back. Check the network: if the post is not there, press Retry.` })),
     ...gaveUp.map((d) => ({ d, kind: "failed" as const, reason: d.lastError || "Publishing failed." })),
   ];
   const fresh = new Set((await newFailures(store, candidates.map((c) => failedOf(c.d)), now)).map((p) => p.id));
-  const postsToSend = candidates.filter((c) => fresh.has(c.d.id));
+  // v0.7.6: PUB-205 (browser offline) goes out at most once per UTC day; later misses wait for tomorrow.
+  const cap = applyOfflineDailyCap(candidates.filter((c) => fresh.has(c.d.id)), await lastOfflineDigestDay(store), now);
+  const postsToSend = cap.send;
 
   const unconfirmed = await prisma.scheduledPost.findMany({
     where: { organizationId: orgId, status: "POSTED", verifiedAt: null, postedAt: { gt: new Date(now - 14 * 86400000) } },
@@ -775,6 +785,7 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
     });
     if (sent) {
       await markAlerted(store, postsToSend.map((c) => failedOf(c.d)), now);
+      if (postsToSend.some((c) => c.kind === "missed")) await saveOfflineDigestDay(store, now);
       // Re-read before writing: a heartbeat may have updated the state meanwhile.
       for (const pubClient of new Set(signOuts.map((o) => o.pubClient))) {
         const cur = await getPublisherState(orgId, pubClient);

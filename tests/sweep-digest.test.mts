@@ -89,3 +89,23 @@ test("PUB-201: a failed send is not remembered; an unreadable store sends", asyn
   assert.equal(await d.inventoryChanged(broken, "team", sig), true);
   await d.saveInventorySig(broken, "team", sig); // does not throw
 });
+
+test("PUB-205 offline cap: one digest per UTC day; later misses wait for tomorrow", async () => {
+  const s = mem();
+  const rows = xMissed(1);
+  const t1 = T0, t2 = T0 + 3600000, t3 = T0 + DAY;
+  let r = d.applyOfflineDailyCap(rows, await d.lastOfflineDigestDay(s), t1);
+  assert.equal(r.send.length, 4);
+  await d.saveOfflineDigestDay(s, t1);
+  r = d.applyOfflineDailyCap(xMissed(2), await d.lastOfflineDigestDay(s), t2); // same day: held
+  assert.equal(r.send.length, 0);
+  assert.equal(r.held.length, 4);
+  const mixed = [...xMissed(3), liOut(2)];
+  r = d.applyOfflineDailyCap(mixed, await d.lastOfflineDigestDay(s), t2); // sign-outs are not held
+  assert.deepEqual(r.send.map((e) => e.kind), ["signed_out"]);
+  r = d.applyOfflineDailyCap(xMissed(2), await d.lastOfflineDigestDay(s), t3); // next day: sent
+  assert.equal(r.send.length, 4);
+  const broken: dd.AlertStore = { get: async () => { throw new Error("x"); }, set: async () => { throw new Error("x"); } };
+  assert.equal(await d.lastOfflineDigestDay(broken), null);
+  await d.saveOfflineDigestDay(broken, t1); // does not throw
+});

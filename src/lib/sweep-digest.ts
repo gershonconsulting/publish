@@ -120,3 +120,31 @@ export async function saveInventorySig(store: AlertStore, scope: string, sig: st
     await store.set(INVENTORY_SIG_KEY(scope), sig);
   } catch { /* worst case: one extra email */ }
 }
+
+// ── PUB-205 (browser offline): at most one email per UTC day (v0.7.6) ────────
+
+export const OFFLINE_DAY_KEY = "pub205_digest_day";
+
+export function utcDay(now: number): string {
+  return new Date(now).toISOString().slice(0, 10);
+}
+
+/**
+ * Posts that missed their window because the publishing browser was offline
+ * ("missed", PUB-205) are reported in at most ONE digest per UTC day. Later
+ * misses the same day are held (not marked in the ledger) and go into the next
+ * day's digest. Failures, stuck posts and sign-outs are not held: they are
+ * different causes, each already reported once.
+ */
+export function applyOfflineDailyCap<T extends { kind: DigestKind }>(rows: T[], lastDay: string | null, now: number): { send: T[]; held: T[] } {
+  if (lastDay !== utcDay(now)) return { send: rows, held: [] };
+  return { send: rows.filter((r) => r.kind !== "missed"), held: rows.filter((r) => r.kind === "missed") };
+}
+
+export async function lastOfflineDigestDay(store: AlertStore): Promise<string | null> {
+  try { return await store.get(OFFLINE_DAY_KEY); } catch { return null; } // cannot tell: allow the send
+}
+
+export async function saveOfflineDigestDay(store: AlertStore, now: number): Promise<void> {
+  try { await store.set(OFFLINE_DAY_KEY, utcDay(now)); } catch { /* worst case: one extra email */ }
+}

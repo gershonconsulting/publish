@@ -13,9 +13,8 @@
  */
 import prisma from "@/lib/db-raw";
 import {
-  MAX_ATTEMPTS, NET_LABEL, addEvent, alertTeam, esc, getSettings, quote, rollUp, type Net,
+  MAX_ATTEMPTS, NET_LABEL, addEvent, getSettings, rollUp, type Net,
 } from "@/lib/publishing";
-import { publishLink } from "@/lib/publishing-mail";
 import {
   getLinked, saveLinked, linkedinPost, linkedinToken, liMatches, xMatches, xPost, xTokenFresh, type Linked,
 } from "@/lib/linked-accounts";
@@ -120,14 +119,7 @@ export async function apiPublishDue(orgId: string): Promise<{ posted: number; fa
       }
       if (giveUp) {
         failed++;
-        await alertTeam(
-          orgId,
-          `A ${NET_LABEL[net] ?? net} post failed to publish`,
-          `<p>The connected ${NET_LABEL[net] ?? net} account could not publish this post.</p>${quote(d.text)}<p>Reason: ${esc(msg)}</p>
-           <p>Fix the cause (Publish → Connections), then press Retry.</p>`,
-          "POST_FAILED_ACCOUNT",
-          { href: publishLink("/publishing/accounts", { client: d.clientId }), label: "Open Connections in Publish" },
-        );
+        // v0.7.5: reported in the next sweep digest (PUB-212) — this runs inside sweep().
       }
     }
     if (d.contentId) {

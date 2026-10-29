@@ -1,0 +1,26 @@
+HANDOFF - Publish v0.10.0 - Knowledge Base "House Style (before Gershon)" - Claude, 2026-10-28
+(Add this block to HANDOFF.txt STATUS when merging.)
+
+Olivier 2026-10-28: "In the knowledge base we should have the data collected by social.gershon.ai
+about the posts previously posted by the company, so we know what is the style of the company
+before we took over the social content publishing."
+
+✅ Knowledge Base 4th section per company: House Style (before Gershon).
+   Takeover date = typed on the page, else EARLIEST of Client.campaignStartDate and the first
+   delivered ScheduledPost (Publish, or Social before the split). None = every collected post counts.
+   Posts = Social's SocialPost rows before that date, minus any post we delivered (id / URL match).
+   Read-only on Social's tables; no schema change (kb.style inside OrgSetting kb:<clientId>).
+✅ Live numbers - src/lib/house-style-stats.ts (pure, tests/house-style.test.mts): rhythm/week,
+   length, paragraphs, hashtags + top hashtags, emoji %, link %, question %, picture %, voice
+   we/I/you, best weekday, best posts. Unmeasurable = "Not measurable", never 0.
+   DB read: src/lib/house-style.ts. API: GET /api/knowledge-base/<id> returns `history`.
+✅ Style guide: "Draft with Intelligence" (Workers AI llama-3.3-70b) writes it ONLY from the
+   pre-takeover posts; drafts itself the first time the page is opened with >= 3 posts; editable.
+   The draft also stores the measured habits + 4 of the company's own posts (kb.style.habits/examples).
+✅ Writers: kbForPrompt() now starts with HOUSE STYLE + habits + own example posts, so Autopilot,
+   Fill the gap and client-revision rewrites all write in the company's voice.
+   Autopilot drafts the style automatically only when it drafts the whole KB (value prop/ICPs empty).
+✅ Checks: tsc, all 5 test files, next build, view rendered with sample data.
+❌ Merge (after v0.9.0) + deploy (social repo, branch deploy/publish).
+❌ Check on live data: some companies may have little pre-takeover history collected - the page
+   says so and points to social.gershon.ai.

@@ -7,13 +7,17 @@
  * it. The Competitive Landscape also shows, live, what the tracked
  * competitors are posting about (from the collected posts).
  * Autopilot reads all three before writing a post.
+ *
+ * v0.10.0 — 4th section "House Style": the company's own posts collected by
+ * social.gershon.ai from BEFORE Gershon took over (numbers, best posts) and a
+ * style guide drafted from them, so our posts keep the company's voice.
  */
 
 import { useSelectedClient } from "@/lib/selected-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/layout/header";
-import { Building2, ChevronDown, ChevronRight, ClipboardPaste, FileUp, Loader2, Plus, Save, Sparkles, Swords, Target, Trash2, Wand2 } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, ClipboardPaste, FileUp, History, Loader2, Plus, Save, Sparkles, Swords, Target, Trash2, Wand2 } from "lucide-react";
 
 type Source = "ai" | "manual";
 type Icp = { id: string; name: string; description: string; source: Source; updatedAt: string; from?: string };
@@ -21,7 +25,23 @@ type KB = {
   valueProp: { text: string; source: Source; updatedAt: string | null };
   competitive: { notes: string; source: Source; updatedAt: string | null };
   icps: Icp[];
+  style: { text: string; source: Source; updatedAt: string | null; takeover: string | null };
 };
+type Stats = {
+  posts: number; firstDate: string | null; lastDate: string | null; perWeek: number | null;
+  byPlatform: Array<{ platform: string; posts: number }>; withText: number;
+  avgChars: number | null; medianChars: number | null; avgParagraphs: number | null; avgHashtags: number | null;
+  topHashtags: Array<{ tag: string; count: number }>;
+  emojiPct: number | null; linkPct: number | null; questionPct: number | null; mediaPct: number | null;
+  voice: { we: number; i: number; you: number; main: string } | null;
+  avgEngagement: number | null; bestWeekday: string | null;
+  topPosts: Array<{ date: string; platform: string; text: string; engagement: number; url: string | null }>;
+  examples: string[];
+};
+type History = {
+  takeover: { date: string | null; source: "manual" | "campaign-start" | "first-delivery" | "none" };
+  stats: Stats; excludedOurs: number; afterTakeover: number;
+} | null;
 type Snapshot = {
   competitors: Array<{ id: string; name: string; posts: number; perWeek: number; topThemes: string[]; keywords: string[] }>;
   themes: Array<{ label: string; self: number; competitors: number }>;
@@ -31,8 +51,9 @@ type Snapshot = {
   linkedVia: string;
   windowDays: number;
 } | null;
-type Company = { id: string; name: string; clientType: string; hasValueProp: boolean; hasCompetitive: boolean; icps: { id: string; name: string }[] };
-type View = "valueProp" | "competitive" | "icps";
+type Company = { id: string; name: string; clientType: string; hasValueProp: boolean; hasCompetitive: boolean; hasStyle?: boolean; icps: { id: string; name: string }[] };
+type View = "valueProp" | "competitive" | "icps" | "style";
+const VIEW_TITLE: Record<View, string> = { valueProp: "Value Prop", competitive: "Competitive Landscape", icps: "ICPs", style: "House Style (before Gershon)" };
 
 function AiTag({ s }: { s: Source }) {
   return s === "ai" ? <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200">AI draft</span> : null;
@@ -48,6 +69,7 @@ export function KnowledgeBaseClient() {
   const [view, setView] = useState<View>("valueProp");
   const [kb, setKb] = useState<KB | null>(null);
   const [snap, setSnap] = useState<Snapshot>(null);
+  const [history, setHistory] = useState<History>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -76,13 +98,13 @@ export function KnowledgeBaseClient() {
   const loadKb = useCallback(async (id: string) => {
     wanted.current = id;
     if (!id) return;
-    setKb(null); setSnap(null); setMsg(null); setDirty(false); setKbErr(null);
+    setKb(null); setSnap(null); setHistory(null); setMsg(null); setDirty(false); setKbErr(null);
     try {
       const r = await fetch(`/api/knowledge-base/${id}`, { cache: "no-store" });
       const j = await r.json().catch(() => null);
       if (wanted.current !== id) return;
       if (!r.ok || !j?.success) throw new Error(j?.error || `Could not load this Knowledge Base (HTTP ${r.status}).`);
-      setKb(j.data.kb); setSnap(j.data.snapshot);
+      setKb(j.data.kb); setSnap(j.data.snapshot); setHistory(j.data.history ?? null);
     } catch (e) {
       if (wanted.current !== id) return;
       setKbErr(e instanceof Error ? e.message : "Could not load this Knowledge Base.");
@@ -114,6 +136,8 @@ export function KnowledgeBaseClient() {
       if (!j?.success) throw new Error(j?.error || "Could not save.");
       // v4.59.0 audit: don't paint this company's KB over another one opened meanwhile.
       if (wanted.current === id) { setKb(j.data.kb); setDirty(false); setMsg("Saved."); }
+      // The takeover date decides which collected posts count — re-read them.
+      if (wanted.current === id) void fetch(`/api/knowledge-base/${id}`, { cache: "no-store" }).then((x) => x.json()).then((x) => { if (wanted.current === id && x?.success) setHistory(x.data.history ?? null); }).catch(() => {});
       void loadList();
     } catch (e) { setMsg(e instanceof Error ? e.message : "Could not save."); }
     setBusy(null);
@@ -133,6 +157,17 @@ export function KnowledgeBaseClient() {
     } catch (e) { setMsg(e instanceof Error ? e.message : "Intelligence failed."); }
     setBusy(null);
   }
+
+  // v0.10.0: the House Style guide drafts itself the first time it is opened
+  // with enough collected posts — nobody has to press the button.
+  const autoDrafted = useRef(new Set<string>());
+  useEffect(() => {
+    if (view !== "style" || !kb || !canWrite || busy || dirty || kb.style.text.trim()) return;
+    if (!history || history.stats.withText < 3 || autoDrafted.current.has(open)) return;
+    autoDrafted.current.add(open);
+    void draft("style");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, kb, history, canWrite, busy, dirty, open]);
 
   const edit = (f: (k: KB) => KB) => { setKb((k) => (k ? f(structuredClone(k)) : k)); setDirty(true); };
 
@@ -170,6 +205,7 @@ export function KnowledgeBaseClient() {
                       ["valueProp", Sparkles, "Value Prop", c.hasValueProp],
                       ["competitive", Swords, "Competitive Landscape", c.hasCompetitive],
                       ["icps", Target, `ICPs (${c.icps.length})`, c.icps.length > 0],
+                      ["style", History, "House Style", !!c.hasStyle],
                     ] as const).map(([v, Icon, label, filled]) => (
                       <button key={v} onClick={() => setView(v)} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm ${view === v ? "bg-gray-900 text-white" : "text-gray-700 hover:bg-gray-50"}`}>
                         <Icon size={14} /> {label}
@@ -198,10 +234,11 @@ export function KnowledgeBaseClient() {
             <>
               <div className="flex flex-wrap items-center gap-2 mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">
-                  {current.name} — {view === "valueProp" ? "Value Prop" : view === "competitive" ? "Competitive Landscape" : "ICPs"}
+                  {current.name} — {VIEW_TITLE[view]}
                 </h2>
                 {view === "valueProp" && <AiTag s={kb.valueProp.source} />}
                 {view === "competitive" && <AiTag s={kb.competitive.source} />}
+                {view === "style" && <AiTag s={kb.style.source} />}
                 {canWrite && (
                   <div className="ml-auto flex gap-2">
                     <button disabled={!!busy} onClick={() => draft(view)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-lg disabled:opacity-50">
@@ -283,6 +320,17 @@ export function KnowledgeBaseClient() {
                     )}
                   </div>
                 </div>
+              )}
+
+              {view === "style" && (
+                <HouseStyleView
+                  company={current.name}
+                  kb={kb}
+                  history={history}
+                  canWrite={canWrite}
+                  onText={(t) => edit((k) => ({ ...k, style: { ...k.style, text: t } }))}
+                  onTakeover={(d) => edit((k) => ({ ...k, style: { ...k.style, takeover: d } }))}
+                />
               )}
 
               {view === "icps" && (
@@ -379,6 +427,127 @@ function IcpUpload({ clientId, dirty, onDone }: { clientId: string; dirty: boole
       {err && <p className="mt-2 text-sm text-red-700">{err}</p>}
       {docs.length > 0 && (
         <p className="mt-2 text-xs text-gray-500">Uploaded: {docs.slice(0, 5).map((d) => `${d.from} (${new Date(d.uploadedAt).toLocaleDateString()})`).join(" · ")}</p>
+      )}
+    </div>
+  );
+}
+
+// ── House Style (v0.10.0) ────────────────────────────────────────────────────
+
+const TAKEOVER_SOURCE: Record<string, string> = {
+  manual: "date typed here",
+  "campaign-start": "campaign start date",
+  "first-delivery": "first post we published",
+  none: "we have never published for this company",
+};
+const PLAT: Record<string, string> = { LINKEDIN: "LinkedIn", TWITTER: "X" };
+
+function Tile({ label, value, hint }: { label: string; value: string | null; hint: string }) {
+  return (
+    <div className="rounded-lg border border-gray-200 p-3">
+      <div className="text-[11px] uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="text-xl font-semibold text-gray-900 mt-0.5">{value ?? <span className="text-gray-400 text-base font-normal">Not measurable</span>}</div>
+      <div className="text-xs text-gray-500 mt-1 leading-snug">{hint}</div>
+    </div>
+  );
+}
+
+function HouseStyleView({ company, kb, history, canWrite, onText, onTakeover }: {
+  company: string; kb: KB; history: History; canWrite: boolean;
+  onText: (t: string) => void; onTakeover: (d: string | null) => void;
+}) {
+  const s = history?.stats;
+  const t = history?.takeover;
+  const pctOf = (v: number | null) => (v === null ? null : `${v}%`);
+  return (
+    <div className="space-y-5">
+      <p className="text-xs text-gray-500">
+        How {company} wrote <b>before Gershon took over</b> its publishing — from its own posts collected by{" "}
+        <a href="https://social.gershon.ai" target="_blank" rel="noreferrer" className="underline">social.gershon.ai</a>.
+        Autopilot, Fill the gap and revisions write in this voice.
+      </p>
+
+      <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 flex flex-wrap items-center gap-3 text-sm">
+        <span className="text-gray-700">
+          {t && !t.date
+            ? <>Gershon has not published for {company} yet — every collected post is its own.</>
+            : <>Gershon took over on <b>{t?.date ?? "—"}</b>{t && <span className="text-gray-500"> ({TAKEOVER_SOURCE[t.source]})</span>} — only posts from before that date count.</>}
+        </span>
+        {canWrite && (
+          <span className="ml-auto flex items-center gap-2">
+            <label className="text-xs text-gray-500">Change:</label>
+            <input type="date" value={kb.style.takeover ?? ""} onChange={(e) => onTakeover(e.target.value || null)} className="border border-gray-300 rounded px-2 py-1 text-sm" />
+            {kb.style.takeover && <button onClick={() => onTakeover(null)} className="text-xs underline text-gray-600">Automatic</button>}
+            <span className="text-xs text-gray-400">then Save</span>
+          </span>
+        )}
+      </div>
+
+      {!history && <p className="text-sm text-red-700">Unavailable — the posts collected by social.gershon.ai could not be read right now.</p>}
+
+      {history && s && s.posts === 0 && (
+        <p className="text-sm text-amber-700">
+          social.gershon.ai has not collected any post of {company}{t?.date ? ` from before ${t.date}` : ""} yet.
+          Collect its history there (its LinkedIn page / X account), then come back — the numbers and the style guide fill in.
+        </p>
+      )}
+
+      {history && s && s.posts > 0 && (
+        <>
+          <div className="text-sm text-gray-700">
+            <b>{s.posts}</b> posts of {company} from <b>{s.firstDate}</b> to <b>{s.lastDate}</b>
+            {" "}({s.byPlatform.map((b) => `${b.posts} ${PLAT[b.platform] ?? b.platform}`).join(", ")}).
+            {history.excludedOurs > 0 && <span className="text-gray-500"> {history.excludedOurs} post{history.excludedOurs === 1 ? "" : "s"} we published left out.</span>}
+            {history.afterTakeover > 0 && <span className="text-gray-500"> {history.afterTakeover} collected after the takeover are not used here.</span>}
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Tile label="Rhythm" value={s.perWeek === null ? null : `${s.perWeek} / week`} hint="How often they posted. Under 2 weeks of history: not measurable." />
+            <Tile label="Length" value={s.avgChars === null ? null : `${s.avgChars} chars`} hint={s.medianChars === null ? "Average post length." : `Median ${s.medianChars} characters, ${s.avgParagraphs} paragraphs/lines.`} />
+            <Tile label="Hashtags" value={s.avgHashtags === null ? null : `${s.avgHashtags} / post`} hint="Average hashtags per post." />
+            <Tile label="Voice" value={s.voice ? (s.voice.main === "mixed" ? "Mixed" : `“${s.voice.main}”`) : null} hint={s.voice ? `we ${s.voice.we}% · I ${s.voice.i}% · you ${s.voice.you}%` : "Too little text to tell."} />
+            <Tile label="Emoji" value={pctOf(s.emojiPct)} hint="Share of posts with at least one emoji." />
+            <Tile label="Links" value={pctOf(s.linkPct)} hint="Share of posts with a web link." />
+            <Tile label="Questions" value={pctOf(s.questionPct)} hint="Share of posts that ask the reader something." />
+            <Tile label="Pictures / video" value={pctOf(s.mediaPct)} hint={s.bestWeekday ? `Best day for engagement: ${s.bestWeekday}.` : "Share of posts with a picture or video."} />
+          </div>
+
+          {s.topHashtags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className="text-sm font-semibold text-gray-900 mr-1">Their hashtags</span>
+              {s.topHashtags.map((h) => <span key={h.tag} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{h.tag} · {h.count}</span>)}
+            </div>
+          )}
+        </>
+      )}
+
+      <div>
+        <h3 className="text-sm font-semibold text-gray-900 mb-1">Style guide</h3>
+        <p className="text-xs text-gray-500 mb-2">Tone, voice, structure, vocabulary, what worked — “Draft with Intelligence” writes it from the posts above; edit what&apos;s wrong and save.</p>
+        <textarea
+          value={kb.style.text}
+          readOnly={!canWrite}
+          onChange={(e) => onText(e.target.value)}
+          rows={12}
+          placeholder={s && s.posts ? "Empty — press “Draft with Intelligence”." : "Empty — needs collected posts first (or write it yourself)."}
+          className="w-full border border-gray-300 rounded-lg p-3 text-sm leading-relaxed"
+        />
+      </div>
+
+      {s && (s.topPosts.length > 0 || s.examples.length > 0) && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">{s.topPosts.length ? "Their best posts (before Gershon)" : "Their latest posts (before Gershon) — no engagement collected"}</h3>
+          {s.topPosts.length
+            ? s.topPosts.map((p, i) => (
+                <blockquote key={i} className="border-l-2 border-gray-200 pl-3 my-2 text-sm text-gray-700 whitespace-pre-line">
+                  <div className="text-xs text-gray-500">{PLAT[p.platform] ?? p.platform} · {p.date} · {p.engagement} engagement {p.url && <a href={p.url} target="_blank" rel="noreferrer" className="underline ml-1">open</a>}</div>
+                  {p.text}
+                </blockquote>
+              ))
+            : s.examples.slice(0, 4).map((x, i) => (
+                <blockquote key={i} className="border-l-2 border-gray-200 pl-3 my-2 text-sm text-gray-700 whitespace-pre-line">{x}</blockquote>
+              ))}
+        </div>
       )}
     </div>
   );

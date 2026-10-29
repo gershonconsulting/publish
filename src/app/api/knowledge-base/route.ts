@@ -26,6 +26,7 @@ export async function GET() {
         ...cl,
         hasValueProp: !!kb.valueProp.text.trim(),
         hasCompetitive: !!kb.competitive.notes.trim(),
+        hasStyle: !!kb.style.text.trim(),
         icps: kb.icps.map((i) => ({ id: i.id, name: i.name })),
       });
     }

@@ -39,6 +39,25 @@ STATUS
   ❌ Refresh the extension folder on Olivier's computer to 0.2.1 (self-reloads within ~20 min).
   ❌ Phone layout: the dark sidebar is fixed 248px on every page (pre-existing; unified-design work).
 
+[2026-10-28] v0.7.5 (nightly) - ONE "did not go out" email per sweep (PUB-212), stacked on #2
+       (branch nightly/2026-10-28-publish-digest, base nightly/2026-10-28-publish-alerts-rebase).
+       ✅ sweep() collects missed (205) / stuck (206) / extension (207) / connected-account (208)
+       failures + sign-outs (209) into one "[PUB-212] N posts did not go out today" table:
+       company, network, reason, direct link. 207/208 no longer emailed on their own.
+       ✅ PUB-201 inventory + Content Ready report: not sent when the state (companies, level,
+       overdue flags) equals the last one SENT (org_settings content_inventory_sig:*, no migration).
+       ✅ nightly run: npx tsc --noEmit clean, npx tsx --test tests/*.test.mts 25/25 (6 new),
+       npm run build OK. ❌ publishing-mail.ts must be mirrored in repo social (PUB-212) and,
+       while Social's workflows still drive the sweep, the change only applies once those
+       call Publish. ❌ merge #2 first; deploy awaiting Olivier's OK.
+[2026-10-28] v0.7.4 (nightly) - PR #1 "one alert per failed post" rebased on main v0.7.3,
+       branch nightly/2026-10-28-publish-alerts-rebase (replaces #1). ✅ ready to test:
+       src/lib/alert-dedupe.ts + tests/alert-dedupe.test.mts, sweep() groups MISSED/stuck
+       alerts (once per post), team digest + Content Ready report show "under half a week"
+       only when the set changed. publishing.ts / publishing-inventory.ts / reports/ops were
+       unchanged on main since #1's base, so #1's logic applies as-is. ❌ not built or tested
+       in the nightly run (no clone): run npx tsc --noEmit + npx tsx --test tests/alert-dedupe.test.mts.
+       ❌ deploy awaiting Olivier's OK.
 [NOTE] v0.4.0 (numbered PUB emails) and v0.5.0 (publishing engine + crons moved here from
        Social) were committed by another session - see git log.
 [BUILT] v0.6.0 (2026-10-26) - NOT DEPLOYED YET - awaiting Olivier's approval.

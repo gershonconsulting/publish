@@ -13,12 +13,20 @@
  * posts, description and competitors — marked "AI draft" until edited.
  *
  * Stored per company in OrgSetting `kb:<clientId>` (JSON) — no schema change.
+ *
+ * v0.10.0 (Olivier, 2026-10-28): a 4th section, HOUSE STYLE — how the company
+ * wrote BEFORE Gershon took over its publishing, from its own posts collected
+ * by social.gershon.ai (lib/house-style.ts). The numbers are live; the style
+ * guide is drafted by Intelligence from those posts and editable. Autopilot,
+ * Fill the gap and revisions write in that voice.
  */
 import prisma from "@/lib/db-raw";
 import { getAISettings, runChat } from "@/lib/content/provider";
 import { buildCompetitorWatch } from "@/lib/competitors/analyze";
 import { getCompetitorIds } from "@/lib/competitors/store";
 import { aboutOf } from "@/lib/reports/ops/intelligence";
+import { houseStyle } from "@/lib/house-style";
+import { statsForPrompt } from "@/lib/house-style-stats";
 
 export type Source = "ai" | "manual";
 export type Icp = { id: string; name: string; description: string; source: Source; updatedAt: string; from?: string };
@@ -26,12 +34,20 @@ export type KnowledgeBase = {
   valueProp: { text: string; source: Source; updatedAt: string | null };
   competitive: { notes: string; source: Source; updatedAt: string | null };
   icps: Icp[];
+  /**
+   * v0.10.0 — the style guide, an optional manual takeover date (YYYY-MM-DD),
+   * and, kept from the last Intelligence draft, the measured habits and a few
+   * of the company's own pre-takeover posts (the writers imitate those).
+   */
+  style: { text: string; source: Source; updatedAt: string | null; takeover: string | null; habits?: string; examples?: string[] };
 };
 const EMPTY: KnowledgeBase = {
   valueProp: { text: "", source: "manual", updatedAt: null },
   competitive: { notes: "", source: "manual", updatedAt: null },
   icps: [],
+  style: { text: "", source: "manual", updatedAt: null, takeover: null },
 };
+const isDay = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
 const key = (clientId: string) => `kb:${clientId}`;
 const DAY = 86400000;
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
@@ -45,6 +61,7 @@ export async function getKB(orgId: string, clientId: string): Promise<KnowledgeB
       valueProp: { ...EMPTY.valueProp, ...(v.valueProp || {}) },
       competitive: { ...EMPTY.competitive, ...(v.competitive || {}) },
       icps: Array.isArray(v.icps) ? v.icps.filter((i) => i && i.name).slice(0, 12) : [],
+      style: { ...EMPTY.style, ...(v.style || {}) },
     };
   } catch {
     return structuredClone(EMPTY);
@@ -63,6 +80,14 @@ export async function saveKB(orgId: string, clientId: string, kb: KnowledgeBase)
       updatedAt: i.updatedAt || new Date().toISOString(),
       ...(i.from ? { from: String(i.from).slice(0, 160) } : {}),
     })),
+    style: {
+      text: String(kb.style?.text || "").slice(0, 6000),
+      source: kb.style?.source === "ai" ? "ai" : "manual",
+      updatedAt: kb.style?.updatedAt || null,
+      takeover: isDay(kb.style?.takeover) ? kb.style!.takeover : null,
+      habits: String(kb.style?.habits || "").slice(0, 1500),
+      examples: (Array.isArray(kb.style?.examples) ? kb.style!.examples : []).map((x) => String(x).slice(0, 500)).slice(0, 4),
+    },
   };
   const value = JSON.stringify(clean);
   await prisma.orgSetting.upsert({
@@ -154,7 +179,7 @@ export function snapshotForPrompt(s: CompetitiveSnapshot): string {
 
 // ── Intelligence drafts ──────────────────────────────────────────────────────
 
-export type Section = "valueProp" | "competitive" | "icps" | "all";
+export type Section = "valueProp" | "competitive" | "icps" | "style" | "all";
 
 async function ownPosts(clientId: string): Promise<string[]> {
   const rows = await prisma.socialPost.findMany({
@@ -186,8 +211,20 @@ export async function draftKB(orgId: string, clientId: string, section: Section 
     valueProp: (section === "all" || section === "valueProp") && (overwrite || !kb.valueProp.text.trim()),
     competitive: (section === "all" || section === "competitive") && (overwrite || !kb.competitive.notes.trim()),
     icps: (section === "all" || section === "icps") && (overwrite || !kb.icps.length),
+    style: (section === "all" || section === "style") && (overwrite || !kb.style.text.trim()),
   };
-  if (!want.valueProp && !want.competitive && !want.icps) return kb;
+  if (want.style) {
+    // Its own call: the style guide comes ONLY from the company's pre-takeover posts.
+    const drafted = await draftStyle(orgId, clientId, client.name, kb.style.takeover).catch((e) => {
+      if (section === "style") throw e;
+      return null;
+    });
+    if (drafted) {
+      kb.style = { ...kb.style, ...drafted, source: "ai", updatedAt: new Date().toISOString() };
+      if (!want.valueProp && !want.competitive && !want.icps) return saveKB(orgId, clientId, kb);
+    }
+  }
+  if (!want.valueProp && !want.competitive && !want.icps) return want.style ? saveKB(orgId, clientId, kb) : kb;
 
   const about = aboutOf(client.name, client.industry) || client.notes?.slice(0, 400) || null;
   const posts = await ownPosts(clientId);
@@ -233,9 +270,40 @@ Answer ONLY with a JSON object:
   return saveKB(orgId, clientId, kb);
 }
 
+/**
+ * The style guide of the company, written from ITS OWN posts from before
+ * Gershon took over (collected by Social). Throws a readable error when
+ * there is nothing to learn from.
+ */
+async function draftStyle(orgId: string, clientId: string, name: string, manualTakeover: string | null): Promise<{ text: string; habits: string; examples: string[] }> {
+  const hs = await houseStyle(orgId, clientId, manualTakeover);
+  const s = hs.stats;
+  if (s.withText < 3 || !s.examples.length) {
+    throw new Error(
+      s.posts
+        ? `Only ${s.withText} readable post${s.withText === 1 ? "" : "s"} from before ${hs.takeover.date ?? "today"} — not enough to describe a style. Collect more of ${name}'s history in social.gershon.ai, or change the takeover date.`
+        : `social.gershon.ai has not collected any post of ${name} from before ${hs.takeover.date ?? "today"} yet — collect its history there first.`,
+    );
+  }
+  const system = `You are an editor describing the writing style of ${name}'s own social-media posts, written BEFORE an agency took over. The goal: future posts must sound like ${name}, not like the agency.
+Describe ONLY what the posts and the numbers show. Never invent. Plain US English, short lines, no buzzwords.
+Write 8-12 short lines, each starting with a label:
+Tone: · Voice (we / I / you, formality): · Typical structure (hook, body, ending): · Length & layout: · Hashtags & emoji: · Links & calls to action: · Recurring topics: · Vocabulary & phrases they use: · What performed best: · Keep: · Avoid (things they never do):
+Answer with the lines only — no JSON, no introduction.`;
+  const user = `MEASURED ON THEIR POSTS:\n${statsForPrompt(s)}\n\n${s.topPosts.length ? "THEIR BEST-PERFORMING POSTS" : "THEIR MOST RECENT POSTS"}:\n---\n${s.examples.join("\n---\n")}`;
+  const ai = { ...(await getAISettings()), model: MODEL };
+  const out = await runChat(ai, system, user, 1500);
+  const text = out.text.replace(/^```[a-z]*\n?|```$/g, "").trim();
+  if (text.length < 80) throw new Error("Intelligence gave no readable answer. Try again.");
+  return { text: text.slice(0, 6000), habits: statsForPrompt(s), examples: s.examples.slice(0, 4) };
+}
+
 /** The knowledge base as prompt text for writing posts. ICP picked by the caller. */
 export function kbForPrompt(kb: KnowledgeBase): string {
   const out: string[] = [];
+  if (kb.style.text.trim()) out.push(`HOUSE STYLE — how this company wrote before we took over (write like this; improve, but never sound like a different company):\n${kb.style.text.trim().slice(0, 1500)}`);
+  if (kb.style.habits?.trim()) out.push(`THEIR MEASURED HABITS (before we took over):\n${kb.style.habits.trim()}`);
+  if (kb.style.examples?.length) out.push(`POSTS THE COMPANY WROTE ITSELF before we took over — its own voice; match it, never copy:\n---\n${kb.style.examples.join("\n---\n")}`);
   if (kb.valueProp.text.trim()) out.push(`VALUE PROPOSITION:\n${kb.valueProp.text.trim().slice(0, 1500)}`);
   if (kb.competitive.notes.trim()) out.push(`COMPETITIVE POSITIONING:\n${kb.competitive.notes.trim().slice(0, 1200)}`);
   return out.join("\n\n");

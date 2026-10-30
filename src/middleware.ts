@@ -20,6 +20,7 @@
  *     state minted by /api/x-connect/:token/start or by a signed-in team member
  *     is the access, checked by takeState in the route.)
  *   - /api/cron/ (Bearer CRON_SECRET, checked in each route)
+ *   - /api/matrix-stats (Client Platform Matrix feed; its secret is SHA-256-checked in the route)
  *   - /api/extension/version (public: the popup's update check)
  *   - /api/extension/publish/ (Publish's own Chrome extension: no session
  *     cookie; its workspace token — Gershon workspace only — or gp_ key is
@@ -40,7 +41,8 @@ const OPEN_PAGES = ["/login", "/review/", "/connect/", "/x-connect/"];
 // v0.5.0: the publishing engine moved here from Social. These routes check
 // their own credential (Bearer CRON_SECRET, or the extension's workspace /
 // gp_ token) and fail closed without it. v0.6.0: + the extension version check.
-const OPEN_API = ["/api/auth/", "/api/ping", "/api/review/", "/api/media/", "/api/connect/", "/api/x-connect/", "/api/cron/", "/api/extension/version", "/api/extension/publish/", "/api/publishing/oauth/x/callback"];
+// v0.11.1: + /api/matrix-stats (Client Platform Matrix feed; SHA-256-checked secret in the route).
+const OPEN_API = ["/api/auth/", "/api/ping", "/api/matrix-stats", "/api/review/", "/api/media/", "/api/connect/", "/api/x-connect/", "/api/cron/", "/api/extension/version", "/api/extension/publish/", "/api/publishing/oauth/x/callback"];
 
 function startsWithAny(pathname: string, prefixes: string[]): boolean {
   return prefixes.some((p) => (p.endsWith("/") ? pathname.startsWith(p) : pathname === p || pathname.startsWith(p + "/")));

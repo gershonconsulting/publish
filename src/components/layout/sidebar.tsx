@@ -29,7 +29,8 @@ import {
   Rocket,
   Puzzle,
   Send,
-  BookOpen, CalendarDays, Link2, Bot, Sparkles} from "lucide-react";
+  BookOpen, CalendarDays, Link2, Bot, Sparkles, CheckCheck,
+} from "lucide-react";
 import { useDemoMode, setDemoMode } from "@/lib/use-demo-mode";
 import { FilterPanel } from "./filter-panel";
 import { ClientList } from "./client-list";
@@ -51,6 +52,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       // v0.6.0: Publish's own Dashboard + Summary first, its own extension last.
       { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
       { href: "/summary", icon: LayoutList, label: "Summary" },
+      { href: "/published", icon: CheckCheck, label: "Published" },
       { href: "/publishing", icon: Send, label: "Content & review" },
       { href: "/publishing/calendar", icon: CalendarDays, label: "Calendar" },
       { href: "/publishing/accounts", icon: Link2, label: "Connections" },

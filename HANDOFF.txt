@@ -11,6 +11,7 @@ SPEC: docs/THREE-PLATFORM-SPLIT.md (sections 2, 14-17 for this product).
 SIBLINGS: social.gershon.ai (repo social), Social Tracking (socialtracking.gershon.ai).
 
 STATUS
+2026-11-06 nightly: v0.11.2 client emails (PUB-1xx) sender "Gershon Consulting · publish.gershon.ai" -> "GC Publish · publish.gershon.ai" (address unchanged) ✅ ready to test on preview (PR #12)
 [BUILT] v0.9.0 (2026-10-28) - branch feat/v0.9.0-dashboard-intelligence-settings - NOT DEPLOYED YET.
   Olivier 2026-10-28: "the dashboard is a disaster" / "missing intelligence (Cloudflare AI)" /
   "missing a Settings menu - several computers, some with a working extension, some not".

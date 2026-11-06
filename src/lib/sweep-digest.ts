@@ -1,5 +1,6 @@
 /**
  * v0.7.5 — ONE internal email per sweep run (PUB-212).
+ * v0.11.3 — and at most ONE PUB-212 per New York day (see the bottom of this file).
  *
  * Audit 2026-10-23 → 10-27: every day at 15:30Z the team got four near-identical
  * "[PUB-205/207/209] A X post did not go out" emails (one per company —
@@ -85,7 +86,7 @@ export function digestHtml(entries: DigestEntry[]): string {
   return `<p>${posts ? `<b>${posts} post${posts === 1 ? "" : "s"} did not go out</b>` : "Nothing failed"}${outs ? `, and <b>${outs} publishing sign-in${outs === 1 ? "" : "s"}</b> need${outs === 1 ? "s" : ""} attention` : ""}:</p>
     <table style="border-collapse:collapse;font-size:13px"><tr><th style="${th}">Company</th><th style="${th}">Network</th><th style="${th}">What happened</th><th style="${th}">Reason</th><th style="${th}"></th></tr>${rows.join("")}</table>
     ${list.length > DIGEST_MAX_ROWS ? `<p>…and ${list.length - DIGEST_MAX_ROWS} more in the calendar.</p>` : ""}
-    <p style="color:#666;font-size:12px">One email per check. Each post is reported once — again only if it fails again after a Retry, or after 7 days. A sign-out is reported once per sign-out.</p>`;
+    <p style="color:#666;font-size:12px">One email a day at most (first check from ${DIGEST_SEND_HOUR_NY}:00 New York time). Anything that fails after it is in tomorrow's email; the calendar always shows it right away. Each post is reported once — again only if it fails again after a Retry, or after 7 days. A sign-out is reported once per sign-out.</p>`;
 }
 
 // ── Content inventory (PUB-201): send only on change ─────────────────────────
@@ -122,6 +123,8 @@ export async function saveInventorySig(store: AlertStore, scope: string, sig: st
 }
 
 // ── PUB-205 (browser offline): at most one email per UTC day (v0.7.6) ────────
+// Superseded in sweep() by the whole-digest daily guard below (v0.11.3); kept
+// for its tests and for any caller still importing it.
 
 export const OFFLINE_DAY_KEY = "pub205_digest_day";
 
@@ -147,4 +150,55 @@ export async function lastOfflineDigestDay(store: AlertStore): Promise<string | 
 
 export async function saveOfflineDigestDay(store: AlertStore, now: number): Promise<void> {
   try { await store.set(OFFLINE_DAY_KEY, utcDay(now)); } catch { /* worst case: one extra email */ }
+}
+
+// ── PUB-212: at most ONE digest per New York day (v0.11.3) ───────────────────
+//
+// Resend audit 2026-10-31 → 11-06: the "[PUB-212] N posts did not go out today"
+// email still came 2-3 times a day (≈14:32Z, ≈16:30Z and 00:00Z), sometimes
+// twice a minute apart (11-01 14:32 + 14:33, 11-03 14:31 + 14:32). Causes:
+//  - sweep() runs every minute (extension), on page load and every 15 min
+//    (cron), and sent one digest per run with anything NEW since the last one —
+//    so a 9:30 miss and an 11:30 extension failure were two emails;
+//  - the v0.7.6 cap held only "missed" rows and reset at 00:00 UTC (19:00/20:00
+//    New York), which released the held rows as a third email every evening;
+//  - two sweeps running at the same moment both read "nothing sent yet".
+// Now the whole digest (all kinds + sign-outs) goes out at most once per New
+// York day, from the first sweep at or after DIGEST_SEND_HOUR_NY that has
+// something to report; later rows wait (not marked in the ledger) for the next
+// day's digest. The Resend Idempotency-Key "pub212-<day>-<org>-<recipient>"
+// stops two concurrent sweeps from both sending.
+
+export const DIGEST_DAY_KEY = "pub212_digest_day";
+/** 10:00 New York: after the usual 9:30 slot and its grace period. */
+export const DIGEST_SEND_HOUR_NY = 10;
+const NY = "America/New_York";
+
+/** "2026-11-05" — the New York calendar day of `now`. */
+export function nyDay(now: number): string {
+  return new Date(now).toLocaleDateString("en-CA", { timeZone: NY });
+}
+
+/** 0-23, New York wall-clock hour of `now`. */
+export function nyHour(now: number): number {
+  const h = Number(new Intl.DateTimeFormat("en-US", { timeZone: NY, hour: "2-digit", hourCycle: "h23" }).format(new Date(now)));
+  return h === 24 ? 0 : h;
+}
+
+/** True when this sweep may send today's PUB-212 (none sent yet today, and it is past the send hour). */
+export function digestDue(lastDay: string | null, now: number): boolean {
+  return lastDay !== nyDay(now) && nyHour(now) >= DIGEST_SEND_HOUR_NY;
+}
+
+/** Resend Idempotency-Key: the same key within 24 h sends only once. */
+export function digestIdempotencyKey(orgId: string, to: string | null, now: number): string {
+  return `pub212-${nyDay(now)}-${orgId}-${(to || "team").toLowerCase()}`.slice(0, 256);
+}
+
+export async function lastDigestDay(store: AlertStore): Promise<string | null> {
+  try { return await store.get(DIGEST_DAY_KEY); } catch { return null; } // cannot tell: the idempotency key still caps it
+}
+
+export async function saveDigestDay(store: AlertStore, now: number): Promise<void> {
+  try { await store.set(DIGEST_DAY_KEY, nyDay(now)); } catch { /* the idempotency key still caps it for 24 h */ }
 }

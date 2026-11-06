@@ -6,7 +6,7 @@ Two families: **1xx = client emails**, **2xx = internal emails**. Code: `src/lib
 (identical in the social and publish repos).
 
 - From (internal): `"GC Publish · publish.gershon.ai" <publish@gershon.ai>`
-- From (client):   `"Gershon Consulting · publish.gershon.ai" <publish@gershon.ai>`
+- From (client):   `"GC Publish · publish.gershon.ai" <publish@gershon.ai>` (v0.11.2; was `"Gershon Consulting · publish.gershon.ai"`)
 - Reply-To: social@gershonconsulting.com · BCC audit copy: social@gershonconsulting.com
 - Subject starts with the number: `[PUB-201] Content inventory: …`
 - Header + footer name publish.gershon.ai, the number and Client/Internal; every link opens publish.gershon.ai

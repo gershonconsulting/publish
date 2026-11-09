@@ -7,21 +7,22 @@
  * Write a post once for LinkedIn and X → send it to the client → the client
  * comments / asks for changes / approves on their private review link → the
  * approved post is scheduled and goes out on both networks at the same time,
- * from the browser signed in to them. Each column is one step.
+ * from the browser signed in to them. Each tab is one step.
+ *
+ * v0.13.0: one company at a time — with none picked, a card per company.
  */
 
 import { useSelectedClient } from "@/lib/selected-client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { Header } from "@/components/layout/header";
-import { CalendarDays, Check, ChevronDown, ChevronRight, Loader2, MessageSquare, Plus, Send, Users } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ChevronRight, Loader2, MessageSquare, Plus, Send } from "lucide-react";
+import { Avatar } from "@/components/layout/client-list";
+import type { MenuClient } from "@/lib/selected-client";
 import {
   act, Counter, fmt, ItemBadge, liLength, LiveStrip, mediaSrc, NET_LABEL, NetChip, nets, PicturePicker, prepareImage, uploadImage, xLength, SuggestXButton, ReviewBadge,
   type ClientLite, type Item, type LiveAll, type Net, type Prepared,
 } from "@/components/publishing/shared";
 import { ItemPanel } from "@/components/publishing/item-panel";
-import { InventoryPanel } from "@/components/publishing/inventory-panel";
-import { AutopilotStrip } from "@/components/publishing/autopilot-panel";
 
 type Limits = { x: number; linkedin: number; images: number; requireImage: boolean };
 type Feed = { items: Item[]; clients: ClientLite[]; live: LiveAll; limits: Limits; canWrite: boolean; chromes?: { online: number; total: number; problems: number } | null };
@@ -47,15 +48,15 @@ export function PublishingContentClient() {
   const [feed, setFeed] = useState<Feed | null>(null);
   const [loading, setLoading] = useState(true);
   // v0.3.0: the client comes from the left-menu client list.
-  const { clientId: clientFilter, setClientId: setClientFilter } = useSelectedClient();
+  const { clientId: clientFilter, setClientId: setClientFilter, clients: menuClients } = useSelectedClient();
+  // v0.13.0: ?tab=review etc. — the client dashboard's tiles open the right tab.
+  const [initialTab, setInitialTab] = useState<TabKey | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [batching, setBatching] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const load = useCallback(async () => {
-    setRefreshKey((k) => k + 1);
     try {
       const r = await fetch("/api/publishing/content", { cache: "no-store" });
       const j = await r.json();
@@ -76,50 +77,44 @@ export function PublishingContentClient() {
 
   useEffect(() => {
     try {
-      const id = new URLSearchParams(location.search).get("item");
+      const q = new URLSearchParams(location.search);
+      const id = q.get("item");
       if (id) setOpenId(id);
+      const t = q.get("tab") as TabKey | null;
+      if (t && TABS.some((x) => x.key === t)) setInitialTab(t);
     } catch {}
   }, []);
 
   const clientName = useMemo(() => new Map((feed?.clients || []).map((c) => [c.id, c.name])), [feed]);
   const items = (feed?.items || []).filter((i) => !clientFilter || i.clientId === clientFilter);
   const cutoff = Date.now() - 60 * 86400000;
+  const companyName = clientFilter ? clientName.get(clientFilter) || menuClients?.find((c) => c.id === clientFilter)?.name || null : null;
 
   return (
     <div>
       <Header
-        title="Publishing"
-        eyebrow="Publishing"
-        subtitle="Write once for LinkedIn and X, get the client's approval, and publish on both at the same time."
+        title="Content & review"
+        eyebrow={clientFilter ? companyName || "Client" : "Pick a company"}
+        subtitle={clientFilter ? "Write once for LinkedIn and X, get the client's approval, and publish on both at the same time." : "Content is worked one company at a time. Pick the company to open its posts."}
         actions={
-          <>
-            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
-              <option value="">All clients</option>
-              {(feed?.clients || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <Link href="/publishing/calendar" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-              <CalendarDays size={14} /> Calendar
-            </Link>
-            <Link href="/publishing/accounts" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-              <Users size={14} /> Connections
-            </Link>
-            {feed?.canWrite && (
-              <button onClick={() => setBatching(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
-                <Send size={14} /> Send for review
-              </button>
-            )}
-            {feed?.canWrite && (
-              <button onClick={() => setComposing(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800">
-                <Plus size={14} /> New post
-              </button>
-            )}
-          </>
+          clientFilter ? (
+            <>
+              {feed?.canWrite && (
+                <button onClick={() => setBatching(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
+                  <Send size={14} /> Send for review
+                </button>
+              )}
+              {feed?.canWrite && (
+                <button onClick={() => setComposing(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800">
+                  <Plus size={14} /> New post
+                </button>
+              )}
+            </>
+          ) : undefined
         }
       />
 
       <LiveStrip live={feed?.live ?? null} chromes={feed?.chromes ?? null} />
-      <AutopilotStrip />
-      <InventoryPanel refreshKey={refreshKey} onPick={setClientFilter} active={clientFilter} />
       {err && <div className="text-sm rounded-lg px-3 py-2 mb-4 bg-red-50 text-red-800">{err}</div>}
 
       {composing && feed && (
@@ -150,8 +145,10 @@ export function PublishingContentClient() {
 
       {loading ? (
         <div className="text-sm text-gray-500 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Loading…</div>
+      ) : !clientFilter ? (
+        <ClientPicker items={feed?.items || []} cutoff={cutoff} menu={menuClients} onPick={setClientFilter} />
       ) : (
-        <Board items={items} cutoff={cutoff} clientName={clientName} requireImage={!!feed?.limits.requireImage} onOpen={setOpenId} />
+        <Board key={clientFilter} items={items} cutoff={cutoff} clientName={clientName} requireImage={!!feed?.limits.requireImage} onOpen={setOpenId} initialTab={initialTab} single />
       )}
 
       {openId && feed && (
@@ -404,18 +401,74 @@ function BatchSender({
 }
 
 
+/**
+ * v0.13.0 (Olivier 2026-11-09: "Content and review is listing all clients. no
+ * sense."). With no company picked, Content & review shows one card per company
+ * with what is waiting in each step; a click opens that company's board.
+ */
+function ClientPicker({ items, cutoff, menu, onPick }: { items: Item[]; cutoff: number; menu: MenuClient[] | null; onPick: (id: string) => void }) {
+  const companies = (menu || []).filter((c) => c.clientType === "CAMPAIGN" || c.clientType === "INTERNAL");
+  const count = (id: string, k: TabKey) => {
+    const t = TABS.find((x) => x.key === k)!;
+    return items.filter((i) => i.clientId === id && t.match(i) && (k !== "published" || new Date(i.updatedAt).getTime() > cutoff)).length;
+  };
+  const cards = companies
+    .map((c) => ({ c, todo: count(c.id, "todo"), review: count(c.id, "review"), ready: count(c.id, "approved") + count(c.id, "scheduled"), problems: count(c.id, "problems") }))
+    .sort((a, b) => b.problems - a.problems || b.todo + b.review - (a.todo + a.review) || a.c.name.localeCompare(b.c.name));
+  if (!menu) return <div className="text-sm text-gray-500 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Loading companies…</div>;
+  if (!cards.length) return <p className="text-sm text-gray-600">No campaign or internal companies yet.</p>;
+  const groups: [string, string][] = [["CAMPAIGN", "Campaign clients"], ["INTERNAL", "Internal"]];
+  return (
+    <div className="space-y-6">
+      {groups.map(([key, label]) => {
+        const list = cards.filter((x) => x.c.clientType === key);
+        if (!list.length) return null;
+        return (
+          <section key={key}>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">{label}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {list.map(({ c, todo, review, ready, problems }) => (
+                <button key={c.id} onClick={() => onPick(c.id)} className={`text-left bg-white rounded-xl border p-4 hover:shadow-sm transition-shadow ${problems ? "border-red-200" : "border-gray-200"}`}>
+                  <div className="flex items-center gap-2.5">
+                    <Avatar c={c} size={30} />
+                    <span className="font-semibold text-gray-900 truncate flex-1">{c.name}</span>
+                    <ArrowRight size={15} className="text-gray-400" />
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5 mt-3 text-center">
+                    {([["To do", todo, todo ? "text-gray-900" : "text-gray-300"], ["With client", review, review ? "text-gray-900" : "text-gray-300"], ["Ready", ready, ready ? "text-emerald-700" : "text-red-600"], ["Problems", problems, problems ? "text-red-700" : "text-gray-300"]] as [string, number, string][]).map(([k, v, cls]) => (
+                      <div key={k} className="rounded-lg bg-gray-50 py-1.5">
+                        <div className={`text-base font-bold tabular-nums ${cls}`}>{v}</div>
+                        <div className="text-[10px] text-gray-500">{k}</div>
+                      </div>
+                    ))}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 /** The content board: one tab per step, posts grouped by company (v4.63.0). */
 function Board({
-  items, cutoff, clientName, requireImage, onOpen,
+  items, cutoff, clientName, requireImage, onOpen, initialTab = null, single = false,
 }: {
   items: Item[]; cutoff: number; clientName: Map<string, string>; requireImage: boolean; onOpen: (id: string) => void;
+  initialTab?: TabKey | null;
+  /** v0.13.0: one company on screen — no company headers, longer list before "Show all". */
+  single?: boolean;
 }) {
   const inTab = useCallback(
     (t: (typeof TABS)[number]) => items.filter(t.match).filter((i) => t.key !== "published" || new Date(i.updatedAt).getTime() > cutoff),
     [items, cutoff],
   );
   const counts = useMemo(() => Object.fromEntries(TABS.map((t) => [t.key, inTab(t).length])) as Record<TabKey, number>, [inTab]);
-  const [tab, setTab] = useState<TabKey | null>(null);
+  const [tab, setTab] = useState<TabKey | null>(initialTab);
+  useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
+  const perGroup = single ? PER_GROUP * 4 : PER_GROUP;
   // First visit: open the first tab that has something to act on.
   const active: TabKey = tab ?? (["problems", "todo", "review", "approved", "scheduled", "published"] as TabKey[]).find((k) => counts[k] > 0) ?? "todo";
   const t = TABS.find((x) => x.key === active)!;
@@ -469,12 +522,12 @@ function Board({
           {groups.map((g) => {
             const isCollapsed = collapsed.has(g.key);
             const showAll = expanded.has(g.key);
-            const shown = showAll ? g.items : g.items.slice(0, PER_GROUP);
+            const shown = showAll ? g.items : g.items.slice(0, perGroup);
             const feedbackN = g.items.filter((i) => i.clientFeedback || i.status === "CHANGES_REQUESTED").length;
             const late = g.items.filter((i) => i.status === "IN_REVIEW" && Date.now() - new Date(i.submittedAt || i.updatedAt).getTime() >= 2 * 86400000).length;
             return (
               <section key={g.key} className="bg-white rounded-xl border border-gray-200">
-                <button
+                {!single && <button
                   onClick={() => setCollapsed((s) => { const n = new Set(s); if (n.has(g.key)) n.delete(g.key); else n.add(g.key); return n; })}
                   className="w-full flex flex-wrap items-center gap-2 px-4 py-2.5 text-left"
                 >
@@ -488,11 +541,11 @@ function Board({
                       {fmt(g.items[0].scheduledAt)}{g.items.length > 1 && g.items[g.items.length - 1].scheduledAt ? ` → ${fmt(g.items[g.items.length - 1].scheduledAt!)}` : ""}
                     </span>
                   )}
-                </button>
+                </button>}
                 {!isCollapsed && (
-                  <div className="border-t border-gray-100 divide-y divide-gray-100">
+                  <div className={`${single ? "" : "border-t border-gray-100"} divide-y divide-gray-100`}>
                     {shown.map((i) => <Row key={i.id} i={i} requireImage={requireImage} onOpen={onOpen} />)}
-                    {g.items.length > PER_GROUP && (
+                    {g.items.length > perGroup && (
                       <button
                         onClick={() => setExpanded((s) => { const n = new Set(s); if (n.has(g.key)) n.delete(g.key); else n.add(g.key); return n; })}
                         className="w-full text-xs text-gray-600 hover:text-gray-900 py-2"

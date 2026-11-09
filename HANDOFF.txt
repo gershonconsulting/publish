@@ -11,6 +11,7 @@ SPEC: docs/THREE-PLATFORM-SPLIT.md (sections 2, 14-17 for this product).
 SIBLINGS: social.gershon.ai (repo social), Social Tracking (socialtracking.gershon.ai).
 
 STATUS
+2026-11-06 nightly: v0.11.3 "[PUB-212] N posts did not go out today" at most ONE per New York day (first sweep from 10:00 ET with something to report; later rows wait for tomorrow's; Resend Idempotency-Key pub212-<day>-<org>-<recipient> stops concurrent sweeps). Was 2-3/day (~14:32Z, ~16:30Z, 00:00Z; two a minute apart on 11-01 and 11-03). sweep-digest tests 9/9 ✅; tsc/build not run (no clone) ❌; deploy awaiting Olivier's OK ❌ (PR nightly/2026-11-06-pub212-once-a-day; live is v0.11.0)
 [BUILT] v0.9.0 (2026-10-28) - branch feat/v0.9.0-dashboard-intelligence-settings - NOT DEPLOYED YET.
   Olivier 2026-10-28: "the dashboard is a disaster" / "missing intelligence (Cloudflare AI)" /
   "missing a Settings menu - several computers, some with a working extension, some not".
@@ -151,3 +152,5 @@ DEPLOY: social repo, workflow deploy-siblings.yml, push branch deploy/publish.
 Pages project: gershon-publish. LinkedIn app redirect:
 https://publish.gershon.ai/api/auth/linkedin/callback
 DB: shared Neon DB (CF_DATABASE_URL). Never prisma db push from here.
+
+2026-11-09: v0.14.0 = PR #11 "Published" (daily view of what went out, per company) rebuilt on main v0.13.1: menu entry added to the new two-level sidebar (All clients + picked company). tsc clean; published-day 3/3, sweep-digest 9/9, alert-dedupe 6/6. ❌ not merged.

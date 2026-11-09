@@ -109,3 +109,47 @@ test("PUB-205 offline cap: one digest per UTC day; later misses wait for tomorro
   assert.equal(await d.lastOfflineDigestDay(broken), null);
   await d.saveOfflineDigestDay(broken, t1); // does not throw
 });
+
+test("PUB-212 once a day (v0.11.3): audit 11-03 — sweeps at 14:31Z, 14:32Z, 16:30Z and 00:00Z -> ONE email", async () => {
+  const s = mem(); const sent: string[] = []; const org = "org1";
+  // What sweep() does now: rows not marked until a digest goes out; at most one per NY day.
+  async function sweepDaily(posts: dd.FailedPost[], entries: m.DigestEntry[], now: number) {
+    const fresh = new Set((await a.newFailures(s, posts, now)).map((p) => p.id));
+    const rows = entries.filter((_, i) => fresh.has(posts[i].id));
+    if (!rows.length || !d.digestDue(await d.lastDigestDay(s), now)) return;
+    sent.push(`${d.digestIdempotencyKey(org, "social@gershonconsulting.com", now)} ${d.digestSubject(rows)}`);
+    await d.saveDigestDay(s, now);
+    await a.markAlerted(s, posts.filter((p) => fresh.has(p.id)), now);
+  }
+  const day = (n: number) => COMPANIES.slice(0, 1).map((c) => ({ id: `n${n}-${c}`, contentId: `${c}-n${n}`, platform: "LINKEDIN", target: null, scheduledAtMs: Date.UTC(2026, 10, 3, 14, 30) + n }));
+  const e = (n: number) => xMissed(0).slice(0, 1).map((x) => ({ ...x, excerpt: `p${n}` }));
+  const at = (h: number, mi: number, dd_ = 3) => Date.UTC(2026, 10, dd_, h, mi);
+  await sweepDaily(day(1), e(1), at(14, 31));       // 9:31 ET: before the send hour -> held
+  await sweepDaily(day(1), e(1), at(14, 32));       // held
+  await sweepDaily([...day(1), ...day(2)], [...e(1), ...e(2)], at(15, 0)); // 10:00 ET -> the day's one email (2 posts)
+  await sweepDaily([...day(1), ...day(2), ...day(3)], [...e(1), ...e(2), ...e(3)], at(16, 30)); // new failure: held
+  await sweepDaily(day(3), e(3), at(0, 0, 4));      // 19:00 ET same NY day: held (the old UTC-midnight email)
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0], "pub212-2026-11-03-org1-social@gershonconsulting.com 2 posts did not go out today");
+  await sweepDaily(day(3), e(3), at(15, 5, 4));     // next NY day after 10:00: the held one goes out
+  assert.equal(sent.length, 2);
+  assert.ok(sent[1].startsWith("pub212-2026-11-04-org1-") && sent[1].endsWith("1 post did not go out today"));
+});
+
+test("PUB-212 daily guard helpers: NY day/hour across DST, due rule, key, broken store", async () => {
+  assert.equal(d.nyDay(Date.UTC(2026, 10, 6, 0, 0)), "2026-11-05");  // 19:00 EST on Nov 5
+  assert.equal(d.nyHour(Date.UTC(2026, 10, 6, 0, 0)), 19);
+  assert.equal(d.nyHour(Date.UTC(2026, 9, 30, 14, 0)), 10);         // EDT: 14Z = 10:00
+  assert.equal(d.nyHour(Date.UTC(2026, 10, 3, 14, 0)), 9);          // EST: 14Z = 09:00
+  assert.equal(d.nyHour(Date.UTC(2026, 10, 3, 5, 0)), 0);           // midnight is 0, not 24
+  const t = Date.UTC(2026, 10, 3, 15, 0);
+  assert.equal(d.digestDue(null, t), true);
+  assert.equal(d.digestDue("2026-11-02", t), true);
+  assert.equal(d.digestDue("2026-11-03", t), false);
+  assert.equal(d.digestDue(null, Date.UTC(2026, 10, 3, 14, 59)), false); // 9:59 ET
+  assert.equal(d.digestIdempotencyKey("o", "Social@X.com", t), "pub212-2026-11-03-o-social@x.com");
+  assert.equal(d.digestIdempotencyKey("o", null, t), "pub212-2026-11-03-o-team");
+  const broken: dd.AlertStore = { get: async () => { throw new Error("x"); }, set: async () => { throw new Error("x"); } };
+  assert.equal(await d.lastDigestDay(broken), null);
+  await d.saveDigestDay(broken, t); // does not throw
+});

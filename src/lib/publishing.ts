@@ -22,14 +22,15 @@
  *    and by a 15-minute GitHub Actions cron — marks deliveries that never went
  *    out (MISSED), claims that never reported back (FAILED), confirms POSTED
  *    ones against the collected posts, rolls each item up to PUBLISHED /
- *    PARTIAL / FAILED, and sends ONE digest per run (v0.7.5, PUB-212) listing each
- *    new problem once and each sign-out once.
+ *    PARTIAL / FAILED, and sends ONE digest (v0.7.5, PUB-212) listing each
+ *    new problem once and each sign-out once — at most one per New York day
+ *    (v0.11.3, sweep-digest.ts digestDue + Resend Idempotency-Key).
  *
  * NEVER DOUBLE-POSTS: a delivery is retried only when the extension reports
  * it failed BEFORE clicking Post.
  */
 import { markAlerted, newFailures, type AlertStore, type FailedPost } from "@/lib/alert-dedupe";
-import { applyOfflineDailyCap, digestHtml, digestSubject, lastOfflineDigestDay, saveOfflineDigestDay, type DigestEntry, type DigestKind } from "@/lib/sweep-digest";
+import { digestDue, digestHtml, digestIdempotencyKey, digestSubject, lastDigestDay, saveDigestDay, type DigestEntry, type DigestKind } from "@/lib/sweep-digest";
 import type { ClientType } from "@prisma/client";
 import prisma from "@/lib/db-raw";
 import { siteUrl } from "@/lib/site";
@@ -103,7 +104,7 @@ const EMPTY_STATE: PublisherState = { lastSeenAt: null, version: null, x: NO_SES
 export const LIVE_WINDOW_MS = 15 * 60 * 1000;
 const CLAIM_TIMEOUT_MS = 20 * 60 * 1000;
 /** v0.7.5: a post that gave up (FAILED) within this window goes into the next sweep digest. */
-const FAILED_LOOKBACK_MS = 24 * 3600 * 1000;
+const FAILED_LOOKBACK_MS = 48 * 3600 * 1000; // v0.11.3: 48 h so a failure held for tomorrow's single PUB-212 is still found
 /** v0.7.6: a missed post held back by the one-email-per-day cap is picked up again within this window. */
 const MISSED_LOOKBACK_MS = 48 * 3600 * 1000;
 export const MAX_ATTEMPTS = 3;
@@ -451,6 +452,7 @@ export async function sendMail(
   cta: { href: string; label: string } | undefined,
   mail: PubMail,
   audience?: MailAudience,
+  opts: { idempotencyKey?: string } = {},
 ): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey || !to) return false;
@@ -458,7 +460,12 @@ export async function sendMail(
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        // v0.11.3: Resend sends a given key only once within 24 h (PUB-212 once a day).
+        ...(opts.idempotencyKey ? { "Idempotency-Key": opts.idempotencyKey } : {}),
+      },
       body: JSON.stringify(withAuditBcc({
         from: publishFrom(aud),
         reply_to: PUBLISH_REPLY_TO,
@@ -480,8 +487,12 @@ export async function alertTeam(
   html: string,
   mail: PubMail,
   link: { href?: string; label?: string } = {},
+  opts: { idempotencyKey?: (to: string | null) => string } = {},
 ): Promise<boolean> {
-  return sendMail(await teamRecipient(orgId), subject, html, { href: link.href || publishLink(), label: link.label || "Open in Publish" }, mail, "internal");
+  const to = await teamRecipient(orgId);
+  return sendMail(to, subject, html, { href: link.href || publishLink(), label: link.label || "Open in Publish" }, mail, "internal", {
+    idempotencyKey: opts.idempotencyKey?.(to),
+  });
 }
 
 export function quote(text: string): string {
@@ -668,7 +679,7 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
     where: { organizationId: orgId, status: "FAILED", alertedAt: { gte: new Date(now - FAILED_LOOKBACK_MS) } },
     take: 200,
   })).filter((d) => !stuckIds.has(d.id));
-  // v0.7.6: MISSED posts held back by the daily PUB-205 cap (not yet in the ledger) are retried.
+  // v0.7.6/v0.11.3: MISSED posts held back for the next daily PUB-212 (not yet in the ledger) are retried.
   const lateIds = new Set(late.map((d) => d.id));
   const heldMissed = (await prisma.scheduledPost.findMany({
     where: { organizationId: orgId, status: "MISSED", alertedAt: { gte: new Date(now - MISSED_LOOKBACK_MS) } },
@@ -682,9 +693,9 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
     ...gaveUp.map((d) => ({ d, kind: "failed" as const, reason: d.lastError || "Publishing failed." })),
   ];
   const fresh = new Set((await newFailures(store, candidates.map((c) => failedOf(c.d)), now)).map((p) => p.id));
-  // v0.7.6: PUB-205 (browser offline) goes out at most once per UTC day; later misses wait for tomorrow.
-  const cap = applyOfflineDailyCap(candidates.filter((c) => fresh.has(c.d.id)), await lastOfflineDigestDay(store), now);
-  const postsToSend = cap.send;
+  // v0.11.3: the whole PUB-212 digest goes out at most once per New York day (see digestDue);
+  // rows found after it stay out of the ledger and go into the next day's digest.
+  const postsToSend = candidates.filter((c) => fresh.has(c.d.id));
 
   const unconfirmed = await prisma.scheduledPost.findMany({
     where: { organizationId: orgId, status: "POSTED", verifiedAt: null, postedAt: { gt: new Date(now - 14 * 86400000) } },
@@ -755,7 +766,7 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
     }
   }
 
-  if (postsToSend.length || signOuts.length) {
+  if ((postsToSend.length || signOuts.length) && digestDue(await lastDigestDay(store), now)) {
     const ids = new Set<string>();
     for (const c of postsToSend) if (c.d.clientId) ids.add(c.d.clientId);
     for (const o of signOuts) for (const id of o.ids) if (id) ids.add(id);
@@ -782,10 +793,10 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
     const sent = await alertTeam(orgId, digestSubject(entries), digestHtml(entries), "SWEEP_DIGEST", {
       href: publishLink("/publishing/calendar"),
       label: "Open the calendar in Publish",
-    });
+    }, { idempotencyKey: (to) => digestIdempotencyKey(orgId, to, now) });
     if (sent) {
+      await saveDigestDay(store, now);
       await markAlerted(store, postsToSend.map((c) => failedOf(c.d)), now);
-      if (postsToSend.some((c) => c.kind === "missed")) await saveOfflineDigestDay(store, now);
       // Re-read before writing: a heartbeat may have updated the state meanwhile.
       for (const pubClient of new Set(signOuts.map((o) => o.pubClient))) {
         const cur = await getPublisherState(orgId, pubClient);

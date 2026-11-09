@@ -1,38 +1,17 @@
 "use client";
 
 /**
- * The left menu — v4.9.0 "Charcoal & Signal Red".
- *
- * Dark charcoal rail, grouped sections (Overview · Portfolio · System ·
- * Workspace). Red appears only as the thin marker on the current page, so the
- * content area stays the focus. Routes and order are unchanged from v2.6.0.
+ * The left menu — dark charcoal rail; red only marks the current page.
+ * v0.13.0: All clients / picked company / switch client / Workspace.
  */
 
 import { SocialMark, SocialWordmark } from "@/components/brand/social-mark";
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import {
-  BarChart3,
-  Building2,
-  LayoutDashboard,
-  LayoutList,
-  Settings,
-  Users,
-  LogOut,
-  ScrollText,
-  AlertOctagon,
-  Network,
-  PlayCircle,
-  StopCircle,
-  Rocket,
-  Puzzle,
-  Send,
-  BookOpen, CalendarDays, Link2, Bot, Sparkles} from "lucide-react";
-import { useDemoMode, setDemoMode } from "@/lib/use-demo-mode";
+import { BarChart3, BookOpen, Bot, CalendarDays, LayoutDashboard, Link2, LogOut, Puzzle, Send, Settings, Sparkles, X } from "lucide-react";
 import { FilterPanel } from "./filter-panel";
-import { ClientList } from "./client-list";
+import { Avatar, ClientList } from "./client-list";
 import { useSelectedClient } from "@/lib/selected-client";
 import { cn } from "@/lib/utils";
 import { PRODUCT_HOME } from "@/lib/product";
@@ -41,57 +20,43 @@ type NavItem = {
   href: string;
   icon: typeof LayoutDashboard;
   label: string;
-  children?: { href: string; label: string }[];
 };
 
-const navGroups: { label: string; items: NavItem[] }[] = [
-  {
-    label: "Publish",
-    items: [
-      // v0.6.0: Publish's own Dashboard + Summary first, its own extension last.
-      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-      { href: "/summary", icon: LayoutList, label: "Summary" },
-      { href: "/publishing", icon: Send, label: "Content & review" },
-      { href: "/publishing/calendar", icon: CalendarDays, label: "Calendar" },
-      { href: "/publishing/accounts", icon: Link2, label: "Connections" },
-      { href: "/publishing/autopilot", icon: Bot, label: "Autopilot" },
-      { href: "/knowledge-base", icon: BookOpen, label: "Knowledge Base" },
-      { href: "/extension", icon: Puzzle, label: "Extension" },
-    ],
-  },
-  {
-    // v0.9.0: the cross-app Intelligence menu (Cloudflare AI) + Publish's own Settings.
-    label: "Workspace",
-    items: [
-      { href: "/intelligence", icon: Sparkles, label: "Intelligence" },
-      { href: "/settings", icon: Settings, label: "Settings" },
-    ],
-  },
+/**
+ * v0.13.0 (Olivier 2026-11-09: "The dashboard does not make sense … It should
+ * be a global dashboard. Per client we should have a dashboard … Content and
+ * review is listing all clients. no sense.").
+ *
+ * Two levels, always visible:
+ *   • All clients — the global dashboard and the views that make sense across
+ *     every company (calendar, connections, Autopilot).
+ *   • The picked company — its own dashboard, its Content & review, calendar,
+ *     funnel, connections and Knowledge Base. Shown only once a company is
+ *     picked, under its name and logo.
+ * Summary is gone: its month numbers live in the global dashboard's table.
+ */
+const globalItems: NavItem[] = [
+  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/publishing/calendar", icon: CalendarDays, label: "Calendar" },
+  { href: "/publishing/funnel", icon: BarChart3, label: "Content funnel" },
+  { href: "/publishing/accounts", icon: Link2, label: "Connections" },
+  { href: "/publishing/autopilot", icon: Bot, label: "Autopilot" },
 ];
 
-/**
- * Whether this workspace still has setup left. Asked once per mount; a failure
- * answers "complete", because a menu entry is not worth an error state.
- */
-function useSetupIncomplete(): boolean {
-  const [incomplete, setIncomplete] = useState(false);
-  useEffect(() => {
-    let live = true;
-    void (async () => {
-      try {
-        const r = await fetch("/api/onboarding");
-        const j = await r.json();
-        if (live && j?.success) setIncomplete(!j.data.complete);
-      } catch {
-        /* leave it hidden */
-      }
-    })();
-    return () => {
-      live = false;
-    };
-  }, []);
-  return incomplete;
-}
+const clientItems: NavItem[] = [
+  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/publishing", icon: Send, label: "Content & review" },
+  { href: "/publishing/calendar", icon: CalendarDays, label: "Calendar" },
+  { href: "/publishing/funnel", icon: BarChart3, label: "Content funnel" },
+  { href: "/publishing/accounts", icon: Link2, label: "Connections" },
+  { href: "/knowledge-base", icon: BookOpen, label: "Knowledge Base" },
+];
+
+const workspaceItems: NavItem[] = [
+  { href: "/intelligence", icon: Sparkles, label: "Intelligence" },
+  { href: "/extension", icon: Puzzle, label: "Extension" },
+  { href: "/settings", icon: Settings, label: "Settings" },
+];
 
 function initials(name?: string | null, email?: string | null): string {
   const src = (name || email || "?").replace(/[^A-Za-z ]/g, " ").trim();
@@ -100,98 +65,93 @@ function initials(name?: string | null, email?: string | null): string {
 }
 
 export function Sidebar() {
-  const pathname = usePathname();
-  const { clientId } = useSelectedClient();
-  const withClient = (href: string) => (clientId ? `${href}?client=${clientId}` : href);
+  const pathname = usePathname() || "";
+  const router = useRouter();
+  const { clientId, setClientId, clients } = useSelectedClient();
   const { data: session } = useSession();
   const role = (session?.user as { role?: string } | undefined)?.role?.toLowerCase() ?? "user";
-  const setupIncomplete = false;
+  const picked = clientId ? clients?.find((c) => c.id === clientId) ?? null : null;
 
-  // "Getting started" earns a place in the menu only while there is still
-  // something to do. A finished workspace shouldn't carry a permanent reminder
-  // of setup it completed months ago.
-  const groups = setupIncomplete
-    ? navGroups.map((g) =>
-        g.label === "Overview"
-          ? { ...g, items: [{ href: "/welcome", icon: Rocket, label: "Getting started" }, ...g.items] }
-          : g,
-      )
-    : navGroups;
+  const isActive = (href: string, list: NavItem[]) =>
+    pathname === href ||
+    // "/publishing" must not light up on /publishing/calendar etc. — those have their own entries.
+    (pathname.startsWith(href + "/") && !list.some((o) => o.href !== href && o.href.startsWith(href + "/") && pathname.startsWith(o.href)));
+
+  const link = (item: NavItem, list: NavItem[], scope: "all" | "client" | "none") => {
+    const active = isActive(item.href, list) && (scope === "none" || (scope === "client") === !!clientId);
+    const go = (e: React.MouseEvent) => {
+      if (scope === "all" && clientId) { e.preventDefault(); setClientId(""); router.push(item.href); }
+    };
+    const href = scope === "client" && clientId ? `${item.href}?client=${clientId}` : item.href;
+    return (
+      <Link
+        key={scope + item.href}
+        href={href}
+        onClick={go}
+        className={cn(
+          "flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-sm font-medium transition-colors",
+          active ? "bg-[#23262D] text-white shadow-[inset_2px_0_0_#D92D20]" : "text-[#C9CDD4] hover:bg-[#1A1D23] hover:text-white",
+        )}
+      >
+        <item.icon className="flex-shrink-0" size={17} strokeWidth={1.8} />
+        {item.label}
+      </Link>
+    );
+  };
 
   return (
     <aside className="w-[248px] flex-shrink-0 bg-[#111317] text-gray-300 flex flex-col h-screen sticky top-0 border-r border-[#1F2229]">
       {/* Brand */}
       <div className="px-5 pt-5 pb-4 border-b border-[#1F2229]">
-        <Link href={PRODUCT_HOME} className="flex items-center gap-2.5">
+        <Link href={PRODUCT_HOME} onClick={(e) => { if (clientId) { e.preventDefault(); setClientId(""); router.push(PRODUCT_HOME); } }} className="flex items-center gap-2.5">
           <SocialMark size={32} className="flex-shrink-0" />
           <SocialWordmark dark />
         </Link>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-5">
-        {groups.map((group) => (
-          <div key={group.label} className="space-y-0.5">
-            <div className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#7D838E]">
-              {group.label}
-            </div>
-            {group.items.map((item) => {
-              // "/publishing" must not light up on /publishing/calendar etc. — those have their own entries.
-              const isActive =
-                pathname === item.href ||
-                (pathname.startsWith(item.href + "/") && !group.items.some((o) => o.href !== item.href && o.href.startsWith(item.href + "/") && pathname.startsWith(o.href)));
-              return (
-                <div key={item.href}>
-                  <Link
-                    href={withClient(item.href)}
-                    className={cn(
-                      "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-[#23262D] text-white shadow-[inset_2px_0_0_#D92D20]"
-                        : "text-[#C9CDD4] hover:bg-[#1A1D23] hover:text-white"
-                    )}
-                  >
-                    <item.icon className="flex-shrink-0" size={17} strokeWidth={1.8} />
-                    {item.label}
-                  </Link>
-                  {item.children && isActive && (
-                    <div className="mt-0.5 mb-1 ml-[30px] pl-2.5 border-l border-[#2A2E37] space-y-0.5">
-                      {item.children.map((sub) => {
-                        // A child that shares its parent's href is active on that exact page only.
-                        const subActive =
-                          pathname === sub.href || (sub.href !== item.href && pathname.startsWith(sub.href + "/"));
-                        return (
-                          <Link
-                            key={sub.href}
-                            href={sub.href}
-                            className={cn(
-                              "block px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-colors",
-                              subActive ? "text-white bg-[#1A1D23]" : "text-[#9BA0AA] hover:text-white"
-                            )}
-                          >
-                            {sub.label}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ))}
+        {/* 1. Every company */}
+        <div className="space-y-0.5">
+          <div className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#7D838E]">All clients</div>
+          {globalItems.map((i) => link(i, globalItems, "all"))}
+        </div>
 
-        {/* Every client, CloudCampaign-style (v0.3.0). */}
+        {/* 2. The picked company */}
+        {clientId && (
+          <div className="rounded-lg bg-[#171A1F] border border-[#23262D] p-1.5 space-y-0.5">
+            <div className="flex items-center gap-2 px-1.5 pt-1 pb-2">
+              {picked ? <Avatar c={picked} size={26} /> : <span className="w-[26px] h-[26px] rounded-md bg-[#2A2E37]" />}
+              <div className="min-w-0 flex-1 leading-tight">
+                <div className="text-[13px] font-semibold text-white truncate" title={picked?.name}>{picked?.name || "Loading…"}</div>
+                <div className="text-[10.5px] text-[#7D838E]">{picked?.clientType === "INTERNAL" ? "Internal" : "Campaign client"}</div>
+              </div>
+              <button
+                onClick={() => { setClientId(""); router.push("/dashboard"); }}
+                title="Back to all clients"
+                aria-label="Back to all clients"
+                className="w-6 h-6 rounded flex items-center justify-center text-[#8E949F] hover:bg-[#23262D] hover:text-white"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            {clientItems.map((i) => link(i, clientItems, "client"))}
+          </div>
+        )}
+
+        {/* 3. Switch company */}
         <ClientList />
 
-        {/* View filters — category / month / network, applied across the
-            dashboard views. Hidden on pages the filters don't drive. */}
+        {/* 4. Workspace tools */}
+        <div className="space-y-0.5">
+          <div className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#7D838E]">Workspace</div>
+          {workspaceItems.map((i) => link(i, workspaceItems, "none"))}
+        </div>
+
         <FilterPanel />
       </nav>
 
       {/* User footer */}
       <div className="px-3 py-3 border-t border-[#1F2229]">
-        
         <div className="flex items-center gap-2.5 px-2 py-1.5">
           <div className="w-8 h-8 rounded-full bg-[#2A2E37] text-white text-xs font-semibold flex items-center justify-center flex-shrink-0">
             {initials(session?.user?.name, session?.user?.email)}
@@ -211,28 +171,5 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
-  );
-}
-
-function DemoToggleButton() {
-  const demoOn = useDemoMode();
-  return (
-    <button
-      onClick={() => {
-        setDemoMode(!demoOn);
-        // Force a hard reload so page data refetches with the new flag.
-        setTimeout(() => { window.location.reload(); }, 80);
-      }}
-      title={demoOn ? "Currently showing FAKE demo data. Click to switch back to real." : "Switch to fake demo data — every chart full, every number inflated."}
-      className={
-        "w-full flex items-center gap-2.5 px-2.5 py-1.5 mb-1 rounded-md text-[13px] font-medium transition-colors " +
-        (demoOn
-          ? "bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/40"
-          : "text-[#8E949F] hover:bg-[#1A1D23] hover:text-white")
-      }
-    >
-      {demoOn ? <StopCircle size={15} /> : <PlayCircle size={15} />}
-      {demoOn ? "Demo mode ON" : "Demo mode"}
-    </button>
   );
 }

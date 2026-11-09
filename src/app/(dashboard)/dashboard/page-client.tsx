@@ -1,28 +1,27 @@
 "use client";
 
 /**
- * /dashboard — Publish's dashboard, v0.9.0 (Olivier, 2026-10-28: "a dashboard
- * should be something people understand very quickly and act on — graphs,
- * diagrams and explanation; and it is missing intelligence").
+ * /dashboard — v0.13.0 (Olivier 2026-11-09: "The dashboard does not make
+ * sense, it is confusing. It should be a global dashboard. Per client we should
+ * have a dashboard to review where we stand.").
  *
- * Reading order, top to bottom:
- *   1. ONE score (0–100) with a colour and a sentence — are we OK?
- *   2. Intelligence (Cloudflare Workers AI): the briefing and what to do next.
- *   3. Do this now: the specific actions, each with its button.
- *   4. Four charts, each answering one question in its title, with one line of
- *      explanation: enough content? where is it stuck? what goes out this
- *      week? did it go out?
- *   5. The detailed tables (v0.6.0), folded under "Show details".
- * Follows the client picked in the left menu. A part that cannot be read says
- * "Unavailable", never 0.
+ *   • No client picked → PortfolioDashboard: every company in one table, worst
+ *     first, with the reason in words (components/publish/portfolio-dashboard).
+ *   • A client picked → ClientDashboard: four plain tiles (content ready,
+ *     approvals, next 7 days, what went out), Do this now, the week and the AI
+ *     briefing, then approvals/delivery; score, pipeline, trend and the v0.6.0
+ *     tables are folded under "More detail".
+ * A part that cannot be read says "—" / "Unavailable", never 0.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronDown, Loader2, MessageSquare, RefreshCw, Sparkles, Wand2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, Loader2, MessageSquare, RefreshCw, Sparkles, Wand2 } from "lucide-react";
 import { Header } from "@/components/layout/header";
+import { useRouter } from "next/navigation";
+import { PortfolioDashboard } from "@/components/publish/portfolio-dashboard";
 import { useSelectedClient } from "@/lib/selected-client";
-import { Card, SectionBody, ago, withClient, type Section } from "@/components/publish/ui";
+import { Card, SectionBody, ago, fmtIn, withClient, type Section } from "@/components/publish/ui";
 import { C, Columns, CoverageBars, Donut, Funnel, Legend, Lines, Meter, ScoreRing, TONE_COLOR, type HBarRow } from "@/components/publish/charts";
 import { Approvals, Connections, Health, NextSeven, Runway } from "@/components/publish/dashboard-details";
 import type { Action, Aging, ApprovalRow, BrowserView, ConnRow, ExtensionStatus, Failure, NetHealth, RunwayRow, Throughput, TrendPoint, UpcomingRow, WaitingItem, WindowKey } from "@/lib/publish-dashboard";
@@ -58,6 +57,20 @@ const ET = "America/New_York";
 
 export function DashboardClient() {
   const { clientId } = useSelectedClient();
+  // v0.13.0: no client picked → the global dashboard (every company, one row each).
+  if (!clientId) return <PortfolioDashboard />;
+  return <ClientDashboard clientId={clientId} />;
+}
+
+/**
+ * v0.13.0 — one company's dashboard: "where do we stand with this client?"
+ * Four plain tiles first (content ready, approvals, next 7 days, what went
+ * out), then what to do, then the week and the AI briefing. The score, the
+ * pipeline charts and the full tables are folded under "More detail".
+ */
+function ClientDashboard({ clientId }: { clientId: string }) {
+  const { clients, setClientId } = useSelectedClient();
+  const router = useRouter();
   const [win, setWin] = useState<WindowKey>("week");
   const [data, setData] = useState<Data | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -73,8 +86,7 @@ export function DashboardClient() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const qs = new URLSearchParams({ window: win });
-      if (clientId) qs.set("client", clientId);
+      const qs = new URLSearchParams({ window: win, client: clientId });
       const r = await fetch(`/api/publishing/dashboard?${qs}`, { cache: "no-store" });
       const j = await r.json();
       if (j?.success) { setData(j.data); setErr(null); } else setErr(j?.error || "Could not load the dashboard.");
@@ -86,6 +98,7 @@ export function DashboardClient() {
   }, [win, clientId]);
 
   useEffect(() => {
+    setData(null);
     void load();
     const t = setInterval(load, 120000);
     return () => clearInterval(t);
@@ -95,65 +108,153 @@ export function DashboardClient() {
     setWin(w);
     try { window.localStorage.setItem("publish.dashboard.window", w); } catch {}
   };
-  const company = clientId && data ? data.companies.find((c) => c.id === clientId)?.name : null;
+  const menuClient = clients?.find((c) => c.id === clientId) || null;
+  const company = (data?.companies.find((c) => c.id === clientId)?.name) || menuClient?.name || "Client";
+  const notServed = data && data.companies.length === 0;
 
   return (
     <div>
       <Header
-        title={company ? `Dashboard — ${company}` : "Dashboard"}
-        eyebrow="Publish"
-        subtitle="Are we on track? One score, what to do now, and four charts: enough content, approvals, this week's posts, and what went out."
+        title={company}
+        eyebrow="Client dashboard"
+        subtitle="Where we stand: content ready ahead, approvals, what goes out next, and what went out."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden">
-              {WINDOWS.map((w) => (
-                <button
-                  key={w.key}
-                  onClick={() => pick(w.key)}
-                  className={`px-2.5 py-1.5 text-xs font-medium ${win === w.key ? "bg-[#CC3333] text-white" : "text-gray-700 hover:bg-gray-50"}`}
-                >
-                  {w.label}
-                </button>
-              ))}
-            </div>
-            <button onClick={() => void load()} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Refresh
+            <button onClick={() => { setClientId(""); router.push("/dashboard"); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+              <ArrowLeft size={14} /> All clients
             </button>
+            <Link href={withClient("/publishing", clientId)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800">
+              Content &amp; review <ArrowRight size={14} />
+            </Link>
           </div>
         }
       />
       {err && <div className="text-sm rounded-lg px-3 py-2 mb-4 bg-red-50 text-red-800">{err}{data ? " — showing the last loaded data." : ""}</div>}
       {!data ? (
         !err && <div className="text-sm text-gray-500 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Loading…</div>
+      ) : notServed ? (
+        <p className="text-sm text-gray-600">{company} is not a Campaign or Internal company, so Publish does not post for it. Change its category in Social to add it.</p>
       ) : (
         <div className="space-y-5">
+          <StandTiles data={data} clientId={clientId} />
+          <DoNow actions={data.actions} companies={data.companies} />
           <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
-            <ScoreCard s={data.score} label={data.windowLabel} className="xl:col-span-3" />
+            <div className="xl:col-span-3"><WeekCard s={data.upcoming} clientId={clientId} /></div>
             <IntelligenceCard win={win} clientId={clientId} className="xl:col-span-2" />
           </div>
-          <DoNow actions={data.actions} companies={data.companies} />
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <CoverageCard s={data.runway} clientId={clientId} />
-            <PipelineCard t={data.throughput} a={data.approvals} label={data.windowLabel} />
-          </div>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <WeekCard s={data.upcoming} clientId={clientId} />
-            <DeliveryCard s={data.health} label={data.windowLabel} />
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+            <h2 className="text-sm font-semibold text-gray-900">How it went — {data.windowLabel.toLowerCase()}</h2>
+            <div className="flex items-center gap-2">
+              <div className="inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden">
+                {WINDOWS.map((w) => (
+                  <button key={w.key} onClick={() => pick(w.key)} className={`px-2.5 py-1.5 text-xs font-medium ${win === w.key ? "bg-[#CC3333] text-white" : "text-gray-700 hover:bg-gray-50"}`}>{w.label}</button>
+                ))}
+              </div>
+              <button onClick={() => void load()} title="Refresh" className="inline-flex items-center px-2 py-1.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             <AgingCard s={data.approvals} clientId={clientId} />
-            <TrendCard s={data.trend} />
+            <DeliveryCard s={data.health} label={data.windowLabel} />
           </div>
           <ReadinessCard conns={data.connections} browsers={data.browsers} />
-          <Details data={data} clientId={clientId} />
-          <p className="text-[11px] text-gray-400">Updated {ago(data.generatedAt)} · CAMPAIGN and INTERNAL companies only · posting days run from tomorrow to the end of next month, in each company&apos;s time zone.</p>
+          <More data={data} clientId={clientId} />
+          <p className="text-[11px] text-gray-400">Updated {ago(data.generatedAt)} · posting days run from tomorrow to the end of next month, in the company&apos;s time zone.</p>
         </div>
       )}
     </div>
   );
 }
 
-/* ── 1. Score ───────────────────────────────────────────────────────────── */
+/* ── 0. Where we stand: four plain tiles ────────────────────────────────── */
+
+function StandTile({ label, value, sub, tone, href }: { label: string; value: string; sub: string; tone: "ok" | "warn" | "bad" | "off"; href: string }) {
+  const ring = tone === "bad" ? "border-red-200 bg-red-50/50" : tone === "warn" ? "border-amber-200 bg-amber-50/50" : "border-gray-200 bg-white";
+  const val = tone === "bad" ? "text-red-700" : tone === "warn" ? "text-amber-700" : tone === "ok" ? "text-gray-900" : "text-gray-400";
+  return (
+    <Link href={href} className={`block rounded-xl border p-4 hover:shadow-sm transition-shadow ${ring}`}>
+      <div className="text-xs font-semibold text-gray-600">{label}</div>
+      <div className={`text-2xl font-bold tabular-nums mt-1 ${val}`}>{value}</div>
+      <div className="text-[11px] text-gray-500 mt-0.5 leading-snug">{sub}</div>
+    </Link>
+  );
+}
+
+function StandTiles({ data, clientId }: { data: Data; clientId: string }) {
+  const tab = (t: string) => `/publishing?client=${clientId}&tab=${t}`;
+  const tz = data.upcoming.ok && data.upcoming.data[0]?.timezone ? data.upcoming.data[0].timezone : ET;
+
+  const r = data.runway.ok ? data.runway.data[0] : undefined;
+  const ready = !r
+    ? { value: "—", sub: "Could not be read just now", tone: "off" as const }
+    : {
+        value: r.coveredToHorizon ? "Covered" : `${r.daysCovered} day${r.daysCovered === 1 ? "" : "s"}`,
+        sub: r.coveredToHorizon ? "Every posting day to the end of next month has a post" : r.firstGap ? `First empty posting day: ${r.firstGap}` : "",
+        tone: (r.level === "critical" ? "bad" : r.level === "low" ? "warn" : "ok") as "ok" | "warn" | "bad",
+      };
+
+  const a = data.approvals.ok ? data.approvals.data.rows[0] : undefined;
+  const waiting = a ? a.waitingClient + a.waitingInternal : null;
+  const ours = a ? a.drafts + a.changesRequested : null;
+  const appr = waiting == null
+    ? { value: "—", sub: "Could not be read just now", tone: "off" as const }
+    : {
+        value: `${waiting}`,
+        sub: `${waiting ? `waiting for approval${a?.oldestWaitingDays ? ` · oldest ${a.oldestWaitingDays} days` : ""}` : "nothing waiting for approval"} · ${ours} to write or fix`,
+        tone: (a && a.oldestWaitingDays != null && a.oldestWaitingDays > 3 ? "warn" : "ok") as "ok" | "warn",
+      };
+
+  const up = data.upcoming.ok ? data.upcoming.data : null;
+  const next = up && up.length ? [...up].sort((x, y) => x.scheduledAt.localeCompare(y.scheduledAt))[0] : null;
+  const week = up == null
+    ? { value: "—", sub: "Could not be read just now", tone: "off" as const }
+    : { value: `${up.length}`, sub: next ? `posts scheduled · next ${fmtIn(next.scheduledAt, next.timezone || tz)}` : "Nothing scheduled in the next 7 days", tone: (up.length ? "ok" : "bad") as "ok" | "bad" };
+
+  const nets = data.health.ok ? data.health.data.networks : null;
+  const out = nets ? nets.reduce((s, x) => s + x.published, 0) : null;
+  const bad = nets ? nets.reduce((s, x) => s + x.failed + x.missed + x.stuck, 0) : null;
+  const went = out == null
+    ? { value: "—", sub: "Could not be read just now", tone: "off" as const }
+    : { value: `${out}`, sub: `published · ${data.windowLabel.toLowerCase()}${bad ? ` · ${bad} did not go out` : ""}`, tone: (bad ? "warn" : "ok") as "ok" | "warn" };
+
+  return (
+    <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <StandTile label="Content ready ahead" {...ready} href={tab("approved")} />
+      <StandTile label="Approvals" {...appr} href={tab("review")} />
+      <StandTile label="Next 7 days" {...week} href={withClient("/publishing/calendar", clientId)} />
+      <StandTile label="Went out" {...went} href={tab(bad ? "problems" : "published")} />
+    </div>
+  );
+}
+
+/* ── More detail (score, pipeline, trend, tables) ─────────────────────────── */
+
+function More({ data, clientId }: { data: Data; clientId: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section>
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50">
+        <span>More detail — health score, pipeline, trend and the full tables</span>
+        <ChevronDown size={16} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="space-y-5 mt-5">
+          <ScoreCard s={data.score} label={data.windowLabel} />
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <CoverageCard s={data.runway} clientId={clientId} />
+            <PipelineCard t={data.throughput} a={data.approvals} label={data.windowLabel} />
+          </div>
+          <TrendCard s={data.trend} />
+          <Details data={data} clientId={clientId} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ── 1. Score ─────────────────────────────────────────────────────────────────────────── */
 
 const TONE_BG = { ok: "bg-emerald-50 text-emerald-800", warn: "bg-amber-50 text-amber-800", bad: "bg-red-50 text-red-800", off: "bg-gray-100 text-gray-600" } as const;
 const PART_HREF: Record<string, string> = { coverage: "#coverage", approvals: "#aging", delivery: "#delivery", connections: "#readiness" };
@@ -188,7 +289,7 @@ function ScoreCard({ s, label, className = "" }: { s: HealthScore; label: string
   );
 }
 
-/* ── 2. Intelligence (Cloudflare Workers AI) ────────────────────────────── */
+/* ── 2. Intelligence (Cloudflare Workers AI) ──────────────────────────── */
 
 function IntelligenceCard({ win, clientId, className = "" }: { win: WindowKey; clientId: string; className?: string }) {
   const [a, setA] = useState<Analysis | null>(null);
@@ -257,7 +358,7 @@ function IntelligenceCard({ win, clientId, className = "" }: { win: WindowKey; c
   );
 }
 
-/* ── 3. Do this now ─────────────────────────────────────────────────────── */
+/* ── 3. Do this now ───────────────────────────────────────────────────────────────────── */
 
 const SEV = {
   critical: { bar: "bg-red-600", chip: "bg-red-50 text-red-700", word: "Urgent" },
@@ -303,7 +404,7 @@ function DoNow({ actions, companies }: { actions: Action[]; companies: { id: str
   );
 }
 
-/* ── 4a. Content coverage ───────────────────────────────────────────────── */
+/* ── 4a. Content coverage ─────────────────────────────────────────────────────────────── */
 
 function CoverageCard({ s, clientId }: { s: Section<RunwayRow[]>; clientId: string }) {
   return (
@@ -351,7 +452,7 @@ function CoverageCard({ s, clientId }: { s: Section<RunwayRow[]>; clientId: stri
   );
 }
 
-/* ── 4b. Pipeline ───────────────────────────────────────────────────────── */
+/* ── 4b. Pipeline ─────────────────────────────────────────────────────────────────────── */
 
 function PipelineCard({ t, a, label }: { t: Section<Throughput>; a: Data["approvals"]; label: string }) {
   return (
@@ -388,7 +489,7 @@ function Mini({ k, v }: { k: string; v: number | null }) {
   );
 }
 
-/* ── 4c. Next 7 days ────────────────────────────────────────────────────── */
+/* ── 4c. Next 7 days ──────────────────────────────────────────────────────────────────── */
 
 function dayKey(iso: string): string {
   return new Date(iso).toLocaleDateString("en-CA", { timeZone: ET });
@@ -430,7 +531,7 @@ function WeekCard({ s, clientId }: { s: Section<UpcomingRow[]>; clientId: string
   );
 }
 
-/* ── 4d. Delivery ───────────────────────────────────────────────────────── */
+/* ── 4d. Delivery ─────────────────────────────────────────────────────────────────────── */
 
 function DeliveryCard({ s, label }: { s: Section<{ networks: NetHealth[]; failures: Failure[] }>; label: string }) {
   return (
@@ -484,7 +585,7 @@ function DeliveryCard({ s, label }: { s: Section<{ networks: NetHealth[]; failur
   );
 }
 
-/* ── 4e. Approval aging ─────────────────────────────────────────────────── */
+/* ── 4e. Approval aging ───────────────────────────────────────────────────────────────── */
 
 function AgingCard({ s, clientId }: { s: Data["approvals"]; clientId: string }) {
   return (
@@ -526,7 +627,7 @@ function AgingCard({ s, clientId }: { s: Data["approvals"]; clientId: string }) 
   );
 }
 
-/* ── 4f. 14-day trend ───────────────────────────────────────────────────── */
+/* ── 4f. 14-day trend ─────────────────────────────────────────────────────────────────── */
 
 function TrendCard({ s }: { s: Section<TrendPoint[]> }) {
   return (
@@ -556,7 +657,7 @@ function TrendCard({ s }: { s: Section<TrendPoint[]> }) {
   );
 }
 
-/* ── 5. Readiness: companies + computers ────────────────────────────────── */
+/* ── 5. Readiness: companies + computers ───────────────────────────────────────────────── */
 
 function ReadinessCard({ conns, browsers }: { conns: Section<ConnRow[]>; browsers: Section<BrowserView[]> }) {
   return (
@@ -631,27 +732,18 @@ function ReadinessCard({ conns, browsers }: { conns: Section<ConnRow[]>; browser
   );
 }
 
-/* ── 6. Details (the v0.6.0 tables) ─────────────────────────────────────── */
+/* ── 6. Details (the v0.6.0 tables) ───────────────────────────────────────────────────── */
 
 function Details({ data, clientId }: { data: Data; clientId: string }) {
-  const [open, setOpen] = useState(false);
   return (
-    <section>
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50">
-        <span>Show details — the full tables behind the charts</span>
-        <ChevronDown size={16} className={`transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <div className="space-y-5 mt-5">
-          <NextSeven s={data.upcoming} clientId={clientId} />
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <Runway s={data.runway} />
-            <Approvals s={data.approvals} />
-          </div>
-          <Health s={data.health} label={data.windowLabel} />
-          <Connections s={data.connections} browsers={data.browsers} />
-        </div>
-      )}
+    <section className="space-y-5">
+      <NextSeven s={data.upcoming} clientId={clientId} />
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <Runway s={data.runway} />
+        <Approvals s={data.approvals} />
+      </div>
+      <Health s={data.health} label={data.windowLabel} />
+      <Connections s={data.connections} browsers={data.browsers} />
     </section>
   );
 }

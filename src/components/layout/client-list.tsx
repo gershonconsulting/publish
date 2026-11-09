@@ -11,7 +11,7 @@
 
 import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Layers, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSelectedClient, type MenuClient } from "@/lib/selected-client";
 
@@ -31,23 +31,28 @@ function initials(name: string): string {
   return ((parts[0]?.[0] || "?") + (parts[1]?.[0] || "")).toUpperCase();
 }
 
-function Avatar({ c }: { c: MenuClient }) {
+export function Avatar({ c, size = 24 }: { c: MenuClient; size?: number }) {
   const [broken, setBroken] = useState(false);
   if (c.logoUrl && !broken) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={c.logoUrl} alt="" onError={() => setBroken(true)} className="w-6 h-6 rounded-md object-contain bg-white flex-shrink-0" />
+      <img src={c.logoUrl} alt="" onError={() => setBroken(true)} style={{ width: size, height: size }} className="rounded-md object-contain bg-white flex-shrink-0 border border-gray-100" />
     );
   }
   return (
-    <span className="w-6 h-6 rounded-md text-[10px] font-semibold text-white flex items-center justify-center flex-shrink-0" style={{ background: colorFor(c.id) }}>
+    <span className="rounded-md font-semibold text-white flex items-center justify-center flex-shrink-0" style={{ background: colorFor(c.id), width: size, height: size, fontSize: Math.round(size * 0.42) }}>
       {initials(c.name)}
     </span>
   );
 }
 
-/** Pages that follow the selected client. Anywhere else, picking a client opens Content & review. */
-const CLIENT_PAGES = ["/dashboard", "/summary", "/publishing", "/publishing/calendar", "/publishing/accounts", "/knowledge-base"];
+/**
+ * Pages that follow the selected client (v0.13.0). Anywhere else, picking a
+ * client opens its dashboard. Leaving a client on a page that only makes sense
+ * for one client (Content & review, Knowledge Base) goes to the global dashboard.
+ */
+const CLIENT_PAGES = ["/dashboard", "/publishing", "/publishing/calendar", "/publishing/funnel", "/publishing/accounts", "/knowledge-base"];
+const CLIENT_ONLY = ["/publishing", "/knowledge-base"];
 
 export function ClientList() {
   const { clientId, setClientId, clients, error, reload } = useSelectedClient();
@@ -63,7 +68,8 @@ export function ClientList() {
 
   function pick(id: string) {
     setClientId(id);
-    if (!CLIENT_PAGES.includes(pathname)) router.push(id ? `/publishing?client=${id}` : "/publishing");
+    if (id && !CLIENT_PAGES.includes(pathname)) router.push(`/dashboard?client=${id}`);
+    else if (!id && CLIENT_ONLY.includes(pathname)) router.push("/dashboard");
   }
 
   const row = (active: boolean) =>
@@ -75,7 +81,7 @@ export function ClientList() {
   return (
     <div className="space-y-0.5">
       <div className="px-2.5 pb-1 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.08em] text-[#7D838E]">
-        <span>Clients</span>
+        <span>{clientId ? "Switch client" : "Clients"}</span>
         {clients && <span className="font-mono normal-case tracking-normal">{clients.length}</span>}
       </div>
 
@@ -90,13 +96,6 @@ export function ClientList() {
           />
         </div>
       )}
-
-      <button onClick={() => pick("")} className={row(!clientId)}>
-        <span className="w-6 h-6 rounded-md bg-[#2A2E37] flex items-center justify-center flex-shrink-0">
-          <Layers size={13} />
-        </span>
-        All clients
-      </button>
 
       {error && (
         <div className="px-2.5 py-1.5 text-xs text-red-300">

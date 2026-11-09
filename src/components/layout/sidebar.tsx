@@ -53,6 +53,8 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { href: "/summary", icon: LayoutList, label: "Summary" },
       { href: "/publishing", icon: Send, label: "Content & review" },
       { href: "/publishing/calendar", icon: CalendarDays, label: "Calendar" },
+      // v0.12.0: the old CloudCampaign / HeroPost views, on live Publish data.
+      { href: "/publishing/funnel", icon: BarChart3, label: "Content funnel" },
       { href: "/publishing/accounts", icon: Link2, label: "Connections" },
       { href: "/publishing/autopilot", icon: Bot, label: "Autopilot" },
       { href: "/knowledge-base", icon: BookOpen, label: "Knowledge Base" },

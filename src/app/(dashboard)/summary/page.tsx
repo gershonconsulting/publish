@@ -1,9 +1,8 @@
-// Publish's own Summary (v0.6.0). Client-side; see page-client.
-import { SummaryClient } from "./page-client";
+// v0.13.0: Summary is part of the global dashboard now (the "Every company" table).
+import { redirect } from "next/navigation";
 
 export const runtime = "edge";
-export const dynamic = "force-dynamic";
 
 export default function SummaryPage() {
-  return <SummaryClient />;
+  redirect("/dashboard");
 }

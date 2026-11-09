@@ -21,10 +21,11 @@ How it works (same as Cloud Campaign "Linked Accounts"):
 5. Tokens last ~60 days (1 year if LinkedIn gives a refresh token); expiry date shown on
    the link card and the public page.
 
-- ✅ Code, types, build, existing tests (43/43)
+- ✅ Code, types, build, tests 46/46
 - ❌ Merge + deploy (needs Olivier's "ship it")
 - ❌ Alexandre opens his link and clicks Allow; first post verified on his profile
-- ❌ Expiry reminder email (PUB-1xx) 10 days before a personal connection expires
+- ✅ PUB-213 to the TEAM (not the person) 10 days before / at expiry, with the link to forward — daily cron (lib/li-connect-link.ts remindLiExpiring, pure logic lib/li-expiry.ts, tests/li-expiry.test.mts)
+- Rule (Olivier 2026-11-09): Publish never emails the person their connect link — Olivier does the sending.
 - ❌ Roll out to the other person accounts (WALLIX → Jean-Noël de Galzain)
 
 ## Other open items

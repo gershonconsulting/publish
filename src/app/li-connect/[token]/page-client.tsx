@@ -59,7 +59,7 @@ export function LiConnectClient({ token }: { token: string }) {
             ? <span className="flex items-center gap-2"><CheckCircle2 size={18} /> Connected as {c!.name}{flash.ok ? " — thank you!" : ""}</span>
             : expired ? "The connection has expired — please connect again." : c?.error ? "The connection stopped working — please connect again." : "Not connected yet."}
         </div>
-        {ok && <p className="text-xs text-gray-500 -mt-2">LinkedIn asks for a new Allow from time to time. This connection is valid until {day(c!.expiresAt)}; we will send you this link again before then.</p>}
+        {ok && <p className="text-xs text-gray-500 -mt-2">LinkedIn asks for a new Allow from time to time. This connection is valid until {day(c!.expiresAt)}; we will send you the link again before then.</p>}
 
         <section className="bg-white rounded-xl border border-gray-200 p-5 text-sm text-gray-700 space-y-3">
           <p>

@@ -8,6 +8,7 @@ import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import { PUBLISHING_CLIENT_WHERE, getTarget } from "@/lib/publishing";
 import { getLinked, liProfileSlug } from "@/lib/linked-accounts";
+import { liEffectiveExpiry } from "@/lib/li-expiry";
 import { liConnectToken, liConnectUrl } from "@/lib/li-connect-link";
 
 export async function GET() {
@@ -27,7 +28,7 @@ export async function GET() {
       profile: liProfileSlug(t.linkedinUrl),
       connected: p ? p.authors[0]?.name || "LinkedIn member" : null,
       vanity: p?.vanity || null,
-      expiresAt: p ? p.refreshExpiresAt || p.expiresAt : null,
+      expiresAt: p ? liEffectiveExpiry(p) : null,
       lastError: p?.lastError || null,
     });
   }

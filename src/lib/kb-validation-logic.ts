@@ -10,7 +10,10 @@
  * A verdict is tied to the text it was given on (fingerprint): when the
  * section is edited afterwards, it goes back to "to check" at that level.
  * No database access here, so it can be tested on its own.
+ *
+ * v0.18.0: a "Brand identity" section (colour codes, fonts, logo, rules) when known.
  */
+import { brandText, type Brand } from "./brand";
 
 export type Level = "internal" | "client";
 export type VerdictStatus = "ok" | "changes";
@@ -21,7 +24,7 @@ export type ValState = {
   /** When every section first passed the internal check: the client link opens from then on. */
   releasedAt: string | null;
 };
-export type SectionKind = "valueProp" | "competitive" | "icp" | "style";
+export type SectionKind = "valueProp" | "competitive" | "icp" | "style" | "brand";
 export type KBSection = { id: string; kind: SectionKind; title: string; text: string; source: "ai" | "manual"; updatedAt: string | null };
 export type SectionStatus = "pending" | VerdictStatus;
 
@@ -30,6 +33,7 @@ type KBLike = {
   competitive: { notes: string; source: "ai" | "manual"; updatedAt: string | null };
   icps: Array<{ id: string; name: string; description: string; source: "ai" | "manual"; updatedAt: string }>;
   style: { text: string; source: "ai" | "manual"; updatedAt: string | null };
+  brand?: Brand;
 };
 
 export const EMPTY_STATE: ValState = { internal: {}, client: {}, releasedAt: null };
@@ -47,6 +51,8 @@ export function sectionsOf(kb: KBLike): KBSection[] {
   if ((kb.style.text || "").trim()) {
     out.push({ id: "style", kind: "style", title: "Writing style", text: kb.style.text, source: kb.style.source, updatedAt: kb.style.updatedAt });
   }
+  const bt = kb.brand ? brandText(kb.brand) : "";
+  if (bt) out.push({ id: "brand", kind: "brand", title: "Brand identity (colours, fonts, logo)", text: bt, source: kb.brand!.source, updatedAt: kb.brand!.updatedAt });
   return out;
 }
 

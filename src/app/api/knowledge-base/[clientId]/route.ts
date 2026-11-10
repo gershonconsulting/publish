@@ -4,9 +4,9 @@ export const runtime = "edge";
  *   GET  → { kb, snapshot, history } — the saved Knowledge Base + the live competitive
  *          snapshot from collected competitor posts + (v0.10.0) the company's own
  *          posts from before Gershon took over, collected by social.gershon.ai.
- *   PUT  → save { valueProp?, competitive?, icps?, style? } (edits become "manual";
+ *   PUT  → save { valueProp?, competitive?, icps?, style?, brand? } (edits become "manual";
  *          style.takeover = "YYYY-MM-DD" or null for automatic).
- *   POST { section: "valueProp"|"competitive"|"icps"|"style"|"all", overwrite?: boolean }
+ *   POST { section: "valueProp"|"competitive"|"icps"|"style"|"brand"|"all", overwrite?: boolean }
  *        → draft with Intelligence.
  */
 import { NextRequest, NextResponse } from "next/server";
@@ -14,6 +14,7 @@ import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import { competitiveSnapshot, draftKB, getKB, saveKB, type KnowledgeBase, type Section } from "@/lib/knowledge-base";
 import { houseStyle } from "@/lib/house-style";
+import { cleanBrand } from "@/lib/brand";
 
 type Ctx = { params: Promise<{ clientId: string }> };
 
@@ -55,6 +56,12 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
       if (typeof b.style.text === "string" && b.style.text !== kb.style.text) kb.style = { ...kb.style, text: b.style.text, source: "manual", updatedAt: now };
       if ("takeover" in b.style) kb.style.takeover = typeof b.style.takeover === "string" && /^\d{4}-\d{2}-\d{2}$/.test(b.style.takeover) ? b.style.takeover : null;
     }
+    // v0.18.0: brand identity — any change from the team makes it "manual".
+    if (b.brand && typeof b.brand === "object") {
+      const next = cleanBrand({ ...b.brand, source: "manual", from: b.brand.from ?? kb.brand.from });
+      const same = JSON.stringify({ ...next, source: 0, updatedAt: 0 }) === JSON.stringify({ ...kb.brand, source: 0, updatedAt: 0 });
+      if (!same) kb.brand = { ...next, updatedAt: now };
+    }
     if (Array.isArray(b.icps)) {
       kb.icps = b.icps.map((i) => {
         const prev = kb.icps.find((p) => p.id === i.id);
@@ -75,7 +82,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (!(await own(c.orgId, clientId))) return NextResponse.json({ success: false, error: "Company not found" }, { status: 404 });
   try {
     const b = ((await req.json().catch(() => null)) || {}) as { section?: Section; overwrite?: boolean };
-    const section: Section = ["valueProp", "competitive", "icps", "style", "all"].includes(b.section as string) ? (b.section as Section) : "all";
+    const section: Section = ["valueProp", "competitive", "icps", "style", "brand", "all"].includes(b.section as string) ? (b.section as Section) : "all";
     const kb = await draftKB(c.orgId, clientId, section, b.overwrite !== false);
     return NextResponse.json({ success: true, data: { kb } });
   } catch (e) {

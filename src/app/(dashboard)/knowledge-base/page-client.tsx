@@ -16,13 +16,18 @@
  * running the campaign checks every section first (internal link); then the
  * client confirms or corrects each section (client link, open once the
  * internal check is complete). Publish never emails these links.
+ *
+ * v0.18.0 — "Brand": colour codes, fonts, logo and brand rules, read from the
+ * company's website ("Read from website") or from what the client shared
+ * (upload / paste — it wins over the website). Autopilot's posts and pictures
+ * follow it; it is part of the validation.
  */
 
 import { useSelectedClient } from "@/lib/selected-client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/layout/header";
-import { BadgeCheck, Building2, ChevronDown, ChevronRight, ClipboardPaste, Copy, FileUp, History, Loader2, Plus, RefreshCw, Save, Sparkles, Swords, Target, Trash2, Wand2 } from "lucide-react";
+import { BadgeCheck, Building2, Palette, ChevronDown, ChevronRight, ClipboardPaste, Copy, FileUp, History, Loader2, Plus, RefreshCw, Save, Sparkles, Swords, Target, Trash2, Wand2 } from "lucide-react";
 
 type Source = "ai" | "manual";
 type Icp = { id: string; name: string; description: string; source: Source; updatedAt: string; from?: string };
@@ -31,7 +36,10 @@ type KB = {
   competitive: { notes: string; source: Source; updatedAt: string | null };
   icps: Icp[];
   style: { text: string; source: Source; updatedAt: string | null; takeover: string | null };
+  brand: Brand;
 };
+type BrandColor = { name: string; hex: string; role: string };
+type Brand = { colors: BrandColor[]; fonts: string; logoUrl: string; notes: string; source: Source; from: string | null; updatedAt: string | null };
 type Stats = {
   posts: number; firstDate: string | null; lastDate: string | null; perWeek: number | null;
   byPlatform: Array<{ platform: string; posts: number }>; withText: number;
@@ -56,9 +64,9 @@ type Snapshot = {
   linkedVia: string;
   windowDays: number;
 } | null;
-type Company = { id: string; name: string; clientType: string; hasValueProp: boolean; hasCompetitive: boolean; hasStyle?: boolean; icps: { id: string; name: string }[] };
-type View = "valueProp" | "competitive" | "icps" | "style" | "validation";
-const VIEW_TITLE: Record<View, string> = { valueProp: "Value Prop", competitive: "Competitive Landscape", icps: "ICPs", style: "House Style (before Gershon)", validation: "Validation" };
+type Company = { id: string; name: string; clientType: string; hasValueProp: boolean; hasCompetitive: boolean; hasStyle?: boolean; hasBrand?: boolean; icps: { id: string; name: string }[] };
+type View = "valueProp" | "competitive" | "icps" | "style" | "brand" | "validation";
+const VIEW_TITLE: Record<View, string> = { valueProp: "Value Prop", competitive: "Competitive Landscape", icps: "ICPs", style: "House Style (before Gershon)", brand: "Brand identity", validation: "Validation" };
 
 function AiTag({ s }: { s: Source }) {
   return s === "ai" ? <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200">AI draft</span> : null;
@@ -211,6 +219,7 @@ export function KnowledgeBaseClient() {
                       ["competitive", Swords, "Competitive Landscape", c.hasCompetitive],
                       ["icps", Target, `ICPs (${c.icps.length})`, c.icps.length > 0],
                       ["style", History, "House Style", !!c.hasStyle],
+                      ["brand", Palette, "Brand", !!c.hasBrand],
                       ["validation", BadgeCheck, "Validation", true],
                     ] as const).map(([v, Icon, label, filled]) => (
                       <button key={v} onClick={() => setView(v)} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm ${view === v ? "bg-gray-900 text-white" : "text-gray-700 hover:bg-gray-50"}`}>
@@ -245,10 +254,11 @@ export function KnowledgeBaseClient() {
                 {view === "valueProp" && <AiTag s={kb.valueProp.source} />}
                 {view === "competitive" && <AiTag s={kb.competitive.source} />}
                 {view === "style" && <AiTag s={kb.style.source} />}
+                {view === "brand" && <AiTag s={kb.brand.source} />}
                 {canWrite && view !== "validation" && (
                   <div className="ml-auto flex gap-2">
                     <button disabled={!!busy} onClick={() => draft(view)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-lg disabled:opacity-50">
-                      {busy === "draft:" + view ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} Draft with Intelligence
+                      {busy === "draft:" + view ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} {view === "brand" ? "Read from website" : "Draft with Intelligence"}
                     </button>
                     <button disabled={!!busy || !dirty} onClick={save} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg disabled:opacity-40">
                       {busy === "save" ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
@@ -326,6 +336,15 @@ export function KnowledgeBaseClient() {
                     )}
                   </div>
                 </div>
+              )}
+
+              {view === "brand" && (
+                <BrandView
+                  brand={kb.brand}
+                  canWrite={canWrite}
+                  onChange={(b) => edit((k) => ({ ...k, brand: b }))}
+                  upload={canWrite ? <BrandUpload clientId={open} dirty={dirty} onDone={(k, from) => { setKb(k); setDirty(false); setMsg(`Brand read from “${from}”. Check it and save any correction.`); void loadList(); }} /> : null}
+                />
               )}
 
               {view === "validation" && <ValidationView clientId={open} company={current.name} canWrite={canWrite} dirty={dirty} />}
@@ -436,6 +455,113 @@ function IcpUpload({ clientId, dirty, onDone }: { clientId: string; dirty: boole
       {docs.length > 0 && (
         <p className="mt-2 text-xs text-gray-500">Uploaded: {docs.slice(0, 5).map((d) => `${d.from} (${new Date(d.uploadedAt).toLocaleDateString()})`).join(" · ")}</p>
       )}
+    </div>
+  );
+}
+
+// ── Brand identity (v0.18.0) ─────────────────────────────────────────────────
+
+const HEX = /^#[0-9A-Fa-f]{6}$/;
+
+function BrandView({ brand, canWrite, onChange, upload }: { brand: Brand; canWrite: boolean; onChange: (b: Brand) => void; upload: ReactNode }) {
+  const set = (patch: Partial<Brand>) => onChange({ ...brand, ...patch });
+  const setColor = (i: number, patch: Partial<BrandColor>) => set({ colors: brand.colors.map((c, k) => (k === i ? { ...c, ...patch } : c)) });
+  const empty = !brand.colors.length && !brand.fonts.trim() && !brand.logoUrl.trim() && !brand.notes.trim();
+  return (
+    <div className="space-y-5">
+      <p className="text-xs text-gray-500">
+        Colour codes, fonts, logo and brand rules. Taken from the company&apos;s website (“Read from website”) or from what the client shared with us — what the client shared wins. Autopilot&apos;s posts and pictures follow it, and the client validates it with the rest of the Knowledge.
+      </p>
+      {upload}
+      {empty && <p className="text-sm text-amber-700">No brand recorded yet — press “Read from website”, or upload what the client shared.</p>}
+      {brand.from && <p className="text-xs text-gray-600">Source: <b>{brand.from}</b>{brand.updatedAt ? ` · ${new Date(brand.updatedAt).toLocaleDateString()}` : ""}</p>}
+
+      <div>
+        <h3 className="text-sm font-semibold text-gray-900 mb-2">Colours</h3>
+        <div className="space-y-2">
+          {brand.colors.map((c, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2">
+              <input type="color" disabled={!canWrite} value={HEX.test(c.hex) ? c.hex : "#000000"} onChange={(e) => setColor(i, { hex: e.target.value.toUpperCase() })} className="w-9 h-9 rounded border border-gray-200 p-0.5 bg-white" title="Pick a colour" />
+              <input value={c.hex} readOnly={!canWrite} onChange={(e) => setColor(i, { hex: e.target.value.trim() })} className={`w-24 font-mono text-sm border rounded px-2 py-1 ${HEX.test(c.hex) ? "border-gray-300" : "border-red-400"}`} />
+              <input value={c.name} readOnly={!canWrite} onChange={(e) => setColor(i, { name: e.target.value })} placeholder="Name" className="w-40 text-sm border border-gray-300 rounded px-2 py-1" />
+              <input value={c.role} readOnly={!canWrite} onChange={(e) => setColor(i, { role: e.target.value })} placeholder="Role (Primary, Accent, Text…)" className="flex-1 min-w-[160px] text-sm border border-gray-300 rounded px-2 py-1" />
+              {canWrite && <button onClick={() => set({ colors: brand.colors.filter((_, k) => k !== i) })} className="text-gray-400 hover:text-red-600" title="Remove"><Trash2 size={14} /></button>}
+            </div>
+          ))}
+          {canWrite && brand.colors.length < 12 && (
+            <button onClick={() => set({ colors: [...brand.colors, { name: "", hex: "#000000", role: "" }] })} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg"><Plus size={14} /> Add a colour</button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <label className="text-sm">
+          <span className="block text-sm font-semibold text-gray-900 mb-1">Fonts</span>
+          <input value={brand.fonts} readOnly={!canWrite} onChange={(e) => set({ fonts: e.target.value })} placeholder="e.g. Montserrat (headings), Open Sans (body)" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
+        </label>
+        <label className="text-sm">
+          <span className="block text-sm font-semibold text-gray-900 mb-1">Logo (image URL)</span>
+          <div className="flex items-center gap-2">
+            <input value={brand.logoUrl} readOnly={!canWrite} onChange={(e) => set({ logoUrl: e.target.value.trim() })} placeholder="https://…" className="flex-1 border border-gray-300 rounded px-2 py-1.5 text-sm" />
+            {/^https?:\/\//.test(brand.logoUrl) && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={brand.logoUrl} alt="Logo" className="h-9 max-w-[120px] object-contain border border-gray-200 rounded bg-white p-1" />
+            )}
+          </div>
+        </label>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-gray-900 mb-1">Brand rules</h3>
+        <textarea value={brand.notes} readOnly={!canWrite} onChange={(e) => set({ notes: e.target.value })} rows={7} placeholder="Look & feel, logo use, imagery style, what to avoid…" className="w-full border border-gray-300 rounded-lg p-3 text-sm leading-relaxed" />
+      </div>
+    </div>
+  );
+}
+
+/** What the client shared (brand book, guidelines, colour codes in an email) → Brand (v0.18.0). */
+function BrandUpload({ clientId, dirty, onDone }: { clientId: string; dirty: boolean; onDone: (kb: KB, from: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [paste, setPaste] = useState<string | null>(null);
+  async function send(body: FormData | string) {
+    if (dirty && !confirm("You have unsaved edits — they will be lost. Continue?")) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(`/api/knowledge-base/${clientId}/brand-upload`, typeof body === "string"
+        ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: body, name: "Pasted text" }) }
+        : { method: "POST", body });
+      const j = await r.json();
+      if (!j?.success) throw new Error(j?.error || "Could not read it.");
+      setPaste(null);
+      onDone(j.data.kb, j.data.from);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Could not read it."); }
+    setBusy(false);
+  }
+  return (
+    <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-gray-800">What the client shared</span>
+        <span className="text-xs text-gray-500">Brand book, guidelines PDF, Word, or the colour codes they sent — it replaces what the website gave.</span>
+        <label className={`ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 bg-white cursor-pointer ${busy ? "opacity-50 pointer-events-none" : ""}`}>
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <FileUp size={14} />} Upload a file
+          <input type="file" className="hidden" accept=".pdf,.docx,.doc,.pptx,.txt,.md,.odt" onChange={(e) => {
+            const f = e.target.files?.[0]; e.target.value = "";
+            if (!f) return;
+            const fd = new FormData(); fd.append("file", f); void send(fd);
+          }} />
+        </label>
+        <button disabled={busy} onClick={() => setPaste(paste === null ? "" : null)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white"><ClipboardPaste size={14} /> Paste text</button>
+      </div>
+      {paste !== null && (
+        <div className="mt-2">
+          <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={5} placeholder="Paste the colour codes, fonts and brand rules the client sent…" className="w-full border border-gray-300 rounded-lg p-2 text-sm" />
+          <button disabled={busy || paste.trim().length < 10} onClick={() => void send(paste)} className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg disabled:opacity-40">
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} Read the brand
+          </button>
+        </div>
+      )}
+      {err && <p className="mt-2 text-sm text-red-700">{err}</p>}
     </div>
   );
 }

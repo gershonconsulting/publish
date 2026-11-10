@@ -9,6 +9,7 @@ import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import { PUBLISHING_CLIENT_WHERE } from "@/lib/publishing";
 import { getKB } from "@/lib/knowledge-base";
+import { hasBrand } from "@/lib/brand";
 
 export async function GET() {
   const c = await publishingCaller(false);
@@ -27,6 +28,7 @@ export async function GET() {
         hasValueProp: !!kb.valueProp.text.trim(),
         hasCompetitive: !!kb.competitive.notes.trim(),
         hasStyle: !!kb.style.text.trim(),
+        hasBrand: hasBrand(kb.brand),
         icps: kb.icps.map((i) => ({ id: i.id, name: i.name })),
       });
     }

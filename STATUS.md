@@ -1,5 +1,17 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-10 (v0.17.0)
+Last updated: 2026-11-10 (v0.18.0)
+
+## v0.18.0 — Brand identity in the Knowledge Base (branch feat/v0.18.0-brand-kb)
+Olivier 2026-11-10 (a client's remark): colour codes and related branding belong in Knowledge,
+taken from the client's website or from what they shared with us.
+- ✅ Knowledge Base → company → "Brand": colours (hex, name, role, picker), fonts, logo URL, brand rules, source.
+- ✅ "Read from website": site HTML + first stylesheets → colours (theme-color, CSS vars, most used), fonts, logo;
+  Intelligence names them; it may only return hex codes found on the site (lib/brand.ts, knowledge-base.ts draftBrandFromSite).
+- ✅ "What the client shared": upload (PDF/Word/text) or paste → POST /api/knowledge-base/:id/brand-upload; wins over the website.
+- ✅ Validation: a "Brand identity" section (with swatches on /kb-review); internal reviewer can correct it as text.
+- ✅ Autopilot / revisions get the brand in the prompt; pictures get the brand colours as a palette hint.
+- ✅ tsc clean, tests 68/68 (tests/brand.test.mts 6/6), next build OK
+- ❌ Merge + deploy after Olivier's "ship it"; then "Read from website" on each client and check
 
 ## v0.16.2 — client review page shows only the external exchange
 Olivier 2026-11-10: internal exchanges about a post must not be shown to the client.

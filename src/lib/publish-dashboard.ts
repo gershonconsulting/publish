@@ -21,6 +21,7 @@ import { PRODUCT_CLIENT_TYPES } from "@/lib/product";
 import { readObjectives, DEFAULT_PER_WEEK } from "@/lib/campaigns/objectives";
 import { destinationsOf, getPublisherState, getRoute, getTarget, liveStatus, validatorOf, NET_LABEL, type Net } from "@/lib/publishing";
 import { isOnline, listBrowsers, targetStatus, type PublishBrowser } from "@/lib/publish-browsers";
+import { directStatus } from "@/lib/linked-publish";
 import { computeRunway, dayLabel, localDate, type Runway, DAY_MS } from "@/lib/publish-runway";
 import { EXTENSION_LATEST, PUBLISH_BROWSER_ID_PREFIX } from "@/lib/extension-version";
 import { readExtSeen, semverLt } from "@/lib/extension/seen";
@@ -407,8 +408,9 @@ async function connections(orgId: string, companies: Company[], upcoming: Upcomi
           };
         });
       } else {
-        targets = dests.map((d) => {
-          const s = targetStatus(browsers, d.network, d.target);
+        const direct = await Promise.all(dests.map((d) => directStatus(orgId, c.id, d).catch(() => null)));
+        targets = dests.map((d, i) => {
+          const s = direct[i] || targetStatus(browsers, d.network, d.target); // v0.14.1: direct (API) connection wins
           return {
             platform: d.network, target: d.target, level: s.level, message: s.message,
             upcoming7: up.filter((u) => u.platform === d.network && (u.target || "").toLowerCase().replace(/^@/, "") === d.target.toLowerCase().replace(/^@/, "")).length

@@ -18,6 +18,7 @@ import {
   InvalidReviewerEmailError, destinationsOf,
 } from "@/lib/publishing";
 import { isOnline, listBrowsers, targetStatus, type PublishBrowser } from "@/lib/publish-browsers";
+import { directStatus } from "@/lib/linked-publish";
 
 async function row(orgId: string, cl: { id: string; name: string; clientType: string }, browsers?: PublishBrowser[]) {
   const [t, token, pending] = await Promise.all([
@@ -35,7 +36,8 @@ async function row(orgId: string, cl: { id: string; name: string; clientType: st
       : null;
   // v4.63.0: for each place this company posts to, can a Chrome publish there right now?
   const all = browsers ?? (await listBrowsers(orgId));
-  const connections = route === "client" ? [] : destinationsOf(t).map((d) => targetStatus(all, d.network, d.target));
+  // v0.14.1: a direct (API) connection wins over the Chrome check.
+  const connections = route === "client" ? [] : await Promise.all(destinationsOf(t).map(async (d) => (await directStatus(orgId, cl.id, d).catch(() => null)) || targetStatus(all, d.network, d.target)));
   return { ...cl, ...t, reviewUrl: reviewUrl(token), pending, route, client, connections };
 }
 

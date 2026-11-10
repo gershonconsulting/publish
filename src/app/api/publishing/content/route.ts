@@ -11,6 +11,7 @@ export const runtime = "edge";
  */
 import { NextRequest, NextResponse } from "next/server";
 import { isOnline, listBrowsers, targetStatus } from "@/lib/publish-browsers";
+import { directStatus } from "@/lib/linked-publish";
 import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import {
@@ -156,6 +157,7 @@ async function chromeSummary(orgId: string): Promise<{ online: number; total: nu
   for (const cl of clients) {
     if (routed.includes(cl.id)) continue;
     for (const d of destinationsOf(await getTarget(orgId, cl.id))) {
+      if (await directStatus(orgId, cl.id, d).catch(() => null)) continue; // v0.14.1: posts through the API
       if (targetStatus(browsers, d.network, d.target).level !== "ok") problems++;
     }
   }

@@ -1,5 +1,5 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-09 (v0.14.0)
+Last updated: 2026-11-09 (v0.14.1)
 
 ## Deploy route
 Merge to `main` does NOT deploy. Deploy = add a line to `.deploy/publish.txt` on
@@ -22,7 +22,8 @@ How it works (same as Cloud Campaign "Linked Accounts"):
    the link card and the public page.
 
 - ✅ Code, types, build, tests 46/46
-- ❌ Merge + deploy (needs Olivier's "ship it")
+- ✅ Merged (#15) and deployed 2026-11-09
+- ✅ v0.14.1: Connections, dashboard and Content counts show direct (API) connections as connected instead of "No Chrome is signed in"
 - ❌ Alexandre opens his link and clicks Allow; first post verified on his profile
 - ✅ PUB-213 to the TEAM (not the person) 10 days before / at expiry, with the link to forward — daily cron (lib/li-connect-link.ts remindLiExpiring, pure logic lib/li-expiry.ts, tests/li-expiry.test.mts)
 - Rule (Olivier 2026-11-09): Publish never emails the person their connect link — Olivier does the sending.

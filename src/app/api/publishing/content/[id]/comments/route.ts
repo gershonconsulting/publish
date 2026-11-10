@@ -8,6 +8,7 @@ import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import { addEvent, esc, getTarget, quote, reviewToken, reviewUrl, sendMail } from "@/lib/publishing";
 import { reviseFromComment, type ReviseResult } from "@/lib/publishing-revise";
+import { clientSubject } from "@/lib/publishing-mail";
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const c = await publishingCaller(true);
@@ -25,10 +26,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const t = await getTarget(c.orgId, item.clientId);
     if (t.reviewerEmail) {
       const href = reviewUrl(await reviewToken(c.orgId, item.clientId));
+      const company = await prisma.client.findFirst({ where: { id: item.clientId }, select: { name: true } });
+      const subject = clientSubject(company?.name, t.reviewerName, item.scheduledAt);
       if (revised?.revised) {
         await sendMail(
           t.reviewerEmail,
-          `New version of your post (version ${revised.version})`,
+          subject,
           `<p><b>${esc(c.name || "Your copywriter")}</b> wrote:</p>${quote(body)}<p>Here is the new version, ready for your review:</p>${quote(revised.text)}`,
           { href, label: "Review the new version" },
           "NEW_VERSION",
@@ -36,7 +39,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       } else {
         await sendMail(
           t.reviewerEmail,
-          "New reply on your post review",
+          subject,
           `<p><b>${esc(c.name || "Your copywriter")}</b> replied:</p>${quote(body)}<p>On:</p>${quote(item.text)}`,
           { href, label: "Open the review" },
           "TEAM_REPLY",

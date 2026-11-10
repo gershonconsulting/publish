@@ -1,5 +1,11 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-09 (v0.14.1)
+Last updated: 2026-11-10 (v0.16.1)
+
+## v0.16.1 — client email subject (branch fix/v0.16.1-client-email-subject)
+- ✅ Every email to a client validator (PUB-101…106) has the subject
+  "Gershon Consulting Publish - <Company> (<first name>) - <Month to post>" (Olivier 2026-11-10).
+  Month = month the posts are for (New York). Internal emails keep [PUB-2xx]. Tests 54/54, tsc clean.
+- ❌ Merge + deploy after Olivier's "ship it"
 
 ## Deploy route
 Merge to `main` does NOT deploy. Deploy = add a line to `.deploy/publish.txt` on

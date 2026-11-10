@@ -11,7 +11,7 @@ import type { ReviseResult } from "@/lib/publishing-revise";
 import {
   addEvent, alertTeam, mediaCount, esc, getSettings, getTarget, notifyReadyForPublishing, quote, reviewToken, reviewUrl, sendMail, textProblems, validatorOf,
 } from "@/lib/publishing";
-import { publishLink } from "@/lib/publishing-mail";
+import { clientSubject, publishLink } from "@/lib/publishing-mail";
 
 /** Default batch name, CloudCampaign-style: "<Company> — <Month YYYY>". */
 export function batchName(client: string, when = new Date()): string {
@@ -44,7 +44,7 @@ export async function submitForReview(
     const hi = target.reviewerName ? `Hi ${esc(target.reviewerName.split(/\s+/)[0])},` : "Hello,";
     await sendMail(
       target.reviewerEmail,
-      `New post to review${client?.name ? " — " + client.name : ""}`,
+      clientSubject(client?.name, v.isTeam ? null : target.reviewerName, item.scheduledAt),
       `<p>${hi}</p><p>A new post is ready for your review${item.version > 1 ? ` (version ${item.version})` : ""}:</p>${quote(item.text)}
        <p>You can comment, ask for changes, or approve it — nothing is published before you approve.</p>`,
       { href: reviewUrl(token), label: "Review the post" },
@@ -101,7 +101,7 @@ export async function submitBatch(
         .join("");
       emailed = await sendMail(
         target.reviewerEmail,
-        `${sent.length} post${sent.length === 1 ? "" : "s"} to review — ${batch}`,
+        clientSubject(client?.name, v.isTeam ? null : target.reviewerName, firstPlanned ?? new Date()),
         `<p>${hi}</p><p><b>${esc(batch)}</b> is ready for your review — ${sent.length} post${sent.length === 1 ? "" : "s"}:</p><ul>${list}</ul>
          <p>Approve them one by one or all at once, comment, or ask for changes. Nothing is published before you approve.</p>`,
         { href: reviewUrl(token), label: "Review the content" },

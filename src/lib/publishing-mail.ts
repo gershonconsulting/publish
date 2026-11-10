@@ -11,8 +11,11 @@
  *   - From:     "GC Publish · publish.gershon.ai" (internal), "Gershon Consulting · publish.gershon.ai" (clients)
  *               (v0.11.2 briefly used "GC " for clients too; reverted Nov 10)
  *               address publish@gershon.ai, replies go to social@gershonconsulting.com
- *   - Subject:  starts with its number, e.g. "[PUB-201] Content inventory: …"
+ *   - Subject:  internal emails start with their number, e.g. "[PUB-201] Content inventory: …"
  *               PUB = the Publish platform; 1xx = client emails, 2xx = internal.
+ *               v0.16.1: emails to the client carry no number in the subject — always
+ *               "Gershon Consulting Publish - <Company (First name)> - <Month YYYY>"
+ *               (clientSubject); the number stays in the body header/footer.
  *   - Body:     a header line and a footer naming publish.gershon.ai, the
  *               number and the audience, plus a direct link into the platform.
  *   - Links:    always https://publish.gershon.ai (never social.gershon.ai),
@@ -83,6 +86,25 @@ export function publishFrom(audience: MailAudience): string {
   const address = override || PUBLISH_FROM_ADDRESS;
   const name = audience === "internal" ? `GC Publish · ${PUBLISH_HOST}` : `Gershon Consulting · ${PUBLISH_HOST}`; // Nov 10: clients get "Gershon Consulting · …" again (Olivier)
   return `"${name}" <${address}>`;
+}
+
+/**
+ * Subject of every email that goes to a client's validator (PUB-1xx), v0.16.1.
+ * Olivier, 2026-11-10: "It should always be: Gershon Consulting Publish -
+ * ClientCompanyName - Month to post", e.g.
+ *   "Gershon Consulting Publish - Altavia (Alexandre) - November 2026".
+ * The company is followed by the validator's first name in brackets when we
+ * know it; the month is the month the posts are FOR (New York), not the send
+ * month. `when` may be a ready-made label ("December 2026").
+ */
+export function clientSubject(company: string | null | undefined, reviewerName: string | null | undefined, when: Date | string | null | undefined = null): string {
+  const name = (company || "").replace(/\s+/g, " ").trim() || "Your content";
+  const first = (reviewerName || "").trim().split(/\s+/)[0] || "";
+  const who = first && !name.toLowerCase().includes(`(${first.toLowerCase()})`) ? `${name} (${first})` : name;
+  const month = typeof when === "string" && when.trim()
+    ? when.trim()
+    : (when instanceof Date && !isNaN(when.getTime()) ? when : new Date()).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "America/New_York" });
+  return `Gershon Consulting Publish - ${who} - ${month}`;
 }
 
 export function numberedSubject(mail: PubMail, subject: string): string {

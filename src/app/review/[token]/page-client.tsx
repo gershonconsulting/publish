@@ -158,7 +158,6 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [showThread, setShowThread] = useState(!compact);
   const nets = i.platforms.split(",");
 
   async function send(action: "comment" | "request_changes" | "approve") {
@@ -180,7 +179,8 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
     setBusy(false);
   }
 
-  const thread = i.comments.filter((c) => c.kind === "comment" || c.kind === "changes_requested" || c.kind === "revised" || (c.kind === "approved" && c.authorRole === "client"));
+  // v0.16.2: the API only sends the external exchange (see lib/review-thread.ts).
+  const thread = i.comments.filter((c) => c.kind !== "submitted");
 
   return (
     <article className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -205,31 +205,32 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
           <div className="text-[11px] text-gray-500 text-center mt-1">Approved on {new Date(i.approvedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}{i.approvedBy ? ` by ${i.approvedBy}` : ""}</div>
         )}
       </div>
-      {(thread.length > 0 || actionable) && (
-        <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/60">
-          {thread.length > 0 && (
-            <button onClick={() => setShowThread((s) => !s)} className="text-xs text-gray-600 inline-flex items-center gap-1 mb-2">
-              <MessageSquare size={12} /> {thread.length} message{thread.length === 1 ? "" : "s"}
-            </button>
-          )}
-          {showThread && (
-            <div className="space-y-2 mb-3">
-              {thread.map((c) => (
-                <div key={c.id} className={`text-sm rounded-lg px-3 py-2 ${c.authorRole === "client" ? "bg-white border border-gray-200 ml-8" : "bg-violet-50 border border-violet-100 mr-8"}`}>
-                  <div className="text-[11px] text-gray-500 mb-0.5">
-                    <strong className="text-gray-800">{c.authorName || (c.authorRole === "client" ? "You" : "Copywriter")}</strong> · v{c.version} · {fmt(c.createdAt)}
-                    {c.kind === "changes_requested" && <span className="ml-1 text-orange-700">asked for changes</span>}
-                    {c.kind === "approved" && <span className="ml-1 text-sky-700">approved</span>}
-                    {c.kind === "revised" && <span className="ml-1 text-emerald-700">new version</span>}
-                  </div>
-                  {c.body && <div className="whitespace-pre-wrap text-gray-900">{c.body}</div>}
+      {thread.length > 0 && (
+        <div className="border-t border-gray-100 px-4 py-3">
+          <div className="text-xs font-semibold text-gray-700 mb-2 inline-flex items-center gap-1"><MessageSquare size={12} /> Your exchange with us</div>
+          <div className="space-y-2">
+            {thread.map((c) => (
+              <div key={c.id} className={`text-sm rounded-lg px-3 py-2 ${c.authorRole === "client" ? "bg-white border border-gray-200 ml-8" : "bg-violet-50 border border-violet-100 mr-8"}`}>
+                <div className="text-[11px] text-gray-500 mb-0.5">
+                  <strong className="text-gray-800">{c.authorRole === "client" ? (c.authorName || "You") : "Copywriter"}</strong> · v{c.version} · {fmt(c.createdAt)}
+                  {c.kind === "changes_requested" && <span className="ml-1 text-orange-700">asked for changes</span>}
+                  {c.kind === "approved" && <span className="ml-1 text-sky-700">approved</span>}
+                  {c.kind === "revised" && <span className="ml-1 text-emerald-700">new version</span>}
                 </div>
-              ))}
-            </div>
-          )}
-          {(actionable || i.status === "CHANGES_REQUESTED") && (
+                {c.body && <div className="whitespace-pre-wrap text-gray-900">{c.body}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {(actionable || i.status === "CHANGES_REQUESTED") && (
+        <div className="border-t-2 border-gray-200 px-4 py-4 bg-gray-50">
             <>
-              <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} placeholder={actionable ? "Comment, or describe the changes you want — a new version is written from it…" : "Add a comment — a new version is written from it…"} className="w-full text-sm border border-gray-300 rounded-lg p-2 bg-white" />
+              <label htmlFor={`c-${i.id}`} className="flex items-center gap-1.5 text-sm font-semibold text-gray-900 mb-1">
+                <MessageSquare size={14} /> Your comments on this post
+              </label>
+              <p className="text-[11px] text-gray-500 mb-2">Write what you would like changed — a new version is written from it. Or approve the post as it is.</p>
+              <textarea id={`c-${i.id}`} value={body} onChange={(e) => setBody(e.target.value)} rows={3} placeholder="Type your comment here…" className="w-full text-sm border border-gray-300 rounded-lg p-2 bg-white" />
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 {actionable && (
                   <button disabled={busy} onClick={() => send("approve")} className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-emerald-600 rounded-lg disabled:opacity-50">
@@ -248,7 +249,6 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
                 {msg && <span className="text-xs text-gray-600">{msg}</span>}
               </div>
             </>
-          )}
         </div>
       )}
     </article>

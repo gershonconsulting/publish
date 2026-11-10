@@ -1,5 +1,11 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-10 (v0.16.1)
+Last updated: 2026-11-10 (v0.16.2)
+
+## v0.16.2 — client review page shows only the external exchange
+Olivier 2026-11-10: internal exchanges about a post must not be shown to the client.
+- ✅ /api/review/:token filters events with lib/review-thread.ts (tests/review-thread.test.mts):
+  client comments/approvals + new versions written from a client comment only.
+- ✅ Clear "Your comments on this post" box per post; "Your exchange with us" above it.
 
 ## v0.16.1 — client email subject (branch fix/v0.16.1-client-email-subject)
 - ✅ Every email to a client validator (PUB-101…106) has the subject

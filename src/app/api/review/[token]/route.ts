@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db-raw";
 import { resolveReviewToken } from "@/lib/publishing";
 import { clientAction, type ClientAction } from "@/lib/publishing-review";
+import { clientVisibleEvents } from "@/lib/review-thread";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
@@ -45,7 +46,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
       take: 100,
     }),
   ]);
-  return NextResponse.json({ success: true, data: { client: client?.name || "", logoUrl: client?.logoUrl || null, agency: org?.name || "", items } });
+  // v0.16.2: the previous comment exchange is internal — never sent to the reviewer.
+  const visible = items.map((i) => ({ ...i, comments: clientVisibleEvents(i.comments) }));
+  return NextResponse.json({ success: true, data: { client: client?.name || "", logoUrl: client?.logoUrl || null, agency: org?.name || "", items: visible } });
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {

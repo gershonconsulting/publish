@@ -48,12 +48,14 @@ async function linkedinViaApi(orgId: string): Promise<boolean> {
 
 export async function apiRouted(orgId: string, d: { clientId: string | null; platform: string; target: string | null }, cache?: Map<string, Linked>): Promise<boolean> {
   if (!d.clientId) return false;
-  if (d.platform === "LINKEDIN" && !(await linkedinViaApi(orgId))) return false;
   let l = cache?.get(d.clientId);
   if (!l) {
     l = await getLinked(orgId, d.clientId);
     cache?.set(d.clientId, l);
   }
+  // v0.14.0: a person who connected their own profile (client LinkedIn connect link)
+  // always posts through the API — no Chrome signed in as them exists.
+  if (d.platform === "LINKEDIN" && !l.linkedin?.personal && !(await linkedinViaApi(orgId))) return false;
   return d.platform === "LINKEDIN" ? liMatches(l.linkedin, d.target) : d.platform === "TWITTER" ? xMatches(l.x, d.target) : false;
 }
 

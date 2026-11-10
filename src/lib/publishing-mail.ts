@@ -57,6 +57,9 @@ export const PUBLISH_MAILS = {
   // and every network sign-out. In Publish it replaces PUB-205…209, which are no
   // longer sent on their own (kept here so the numbers are never reused).
   SWEEP_DIGEST: { no: "PUB-212", audience: "internal", title: "Posts that did not go out (digest)" },
+  // v0.14.0: a person's own LinkedIn profile connection (client LinkedIn connect link) needs a new "Allow".
+  // Goes to the team, who forward the link themselves (Olivier, 2026-11-09: "I will do the sending").
+  LI_PERSONAL_EXPIRING: { no: "PUB-213", audience: "internal", title: "Personal LinkedIn connection expiring" },
   // A validation email (1xx) that goes to the team because the company has no
   // reviewer is re-labelled internal at send time, keeping its number.
 } as const satisfies Record<string, MailDef>;

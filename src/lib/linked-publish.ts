@@ -135,3 +135,27 @@ export async function apiPublishDue(orgId: string): Promise<{ posted: number; fa
   }
   return { posted, failed };
 }
+
+/**
+ * v0.14.1 — Connections status for a destination that posts through a direct
+ * connection (X connect link, personal LinkedIn connect link, or a connected
+ * page with LinkedIn-via-API on). Before this, the card only looked at the
+ * publishing Chromes and showed "Not connected" for @alexrouleau although the
+ * X API connection was green (Olivier, 2026-11-09).
+ * null → not direct; fall back to the Chrome status.
+ */
+export async function directStatus(
+  orgId: string,
+  clientId: string,
+  d: { network: "LINKEDIN" | "TWITTER"; target: string },
+  cache?: Map<string, Linked>,
+): Promise<{ platform: "LINKEDIN" | "TWITTER"; target: string; level: "ok"; browsers: string[]; message: string } | null> {
+  if (!(await apiRouted(orgId, { clientId, platform: d.network, target: d.target }, cache))) return null;
+  const l = cache?.get(clientId) || (await getLinked(orgId, clientId));
+  const err = d.network === "TWITTER" ? l.x?.lastError : l.linkedin?.lastError;
+  const who = d.network === "TWITTER" ? `@${l.x?.username}` : l.linkedin?.personal ? l.linkedin.authors[0]?.name || "the person" : "the page";
+  return {
+    platform: d.network, target: d.target, level: "ok", browsers: [],
+    message: `Connected directly — posts go out through the ${d.network === "TWITTER" ? "X" : "LinkedIn"} API as ${who}. No Chrome needed.${err ? ` Last error: ${err}` : ""}`,
+  };
+}

@@ -8,8 +8,8 @@
  * We have two types of emails: the one for clients and the one for internal."
  *
  * So, for every Publish email:
- *   - From:     "GC Publish · publish.gershon.ai"           (internal)
- *               "Gershon Consulting · publish.gershon.ai"   (clients)
+ *   - From:     "GC Publish · publish.gershon.ai"           (internal and clients — v0.11.2:
+ *               report senders start with "GC "; clients were "Gershon Consulting · …")
  *               address publish@gershon.ai, replies go to social@gershonconsulting.com
  *   - Subject:  starts with its number, e.g. "[PUB-201] Content inventory: …"
  *               PUB = the Publish platform; 1xx = client emails, 2xx = internal.
@@ -81,7 +81,7 @@ function escHtml(s: string): string {
 export function publishFrom(audience: MailAudience): string {
   const override = (process.env.PUBLISH_MAIL_FROM || "").trim();
   const address = override || PUBLISH_FROM_ADDRESS;
-  const name = audience === "internal" ? `GC Publish · ${PUBLISH_HOST}` : `Gershon Consulting · ${PUBLISH_HOST}`;
+  const name = audience === "internal" ? `GC Publish · ${PUBLISH_HOST}` : `GC Publish · ${PUBLISH_HOST}`; // v0.11.2: "GC " for clients too (was "Gershon Consulting · …")
   return `"${name}" <${address}>`;
 }
 

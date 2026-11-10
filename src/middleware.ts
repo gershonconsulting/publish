@@ -22,6 +22,8 @@
  *   - /li-connect/ + /api/li-connect/ + /api/publishing/oauth/linkedin/callback
  *     (v0.14.0: a person connects their OWN LinkedIn profile; gl_ token in the
  *     URL, then the single-use OAuth state checked by takeState is the access)
+ *   - /kb-review/ + /api/kb-review/ (v0.16.0: Knowledge validation, internal then client;
+ *     ki_/kc_ token in the URL is the access, checked in the route)
  *   - /api/cron/ (Bearer CRON_SECRET, checked in each route)
  *   - /api/matrix-stats (Client Platform Matrix feed; its secret is SHA-256-checked in the route)
  *   - /api/extension/version (public: the popup's update check)
@@ -40,12 +42,12 @@ import { getToken } from "next-auth/jwt";
 import { neon } from "@neondatabase/serverless";
 
 /** Pages and API prefixes that do not need a Gershon session. */
-const OPEN_PAGES = ["/login", "/review/", "/connect/", "/x-connect/", "/li-connect/"];
+const OPEN_PAGES = ["/login", "/review/", "/kb-review/", "/connect/", "/x-connect/", "/li-connect/"];
 // v0.5.0: the publishing engine moved here from Social. These routes check
 // their own credential (Bearer CRON_SECRET, or the extension's workspace /
 // gp_ token) and fail closed without it. v0.6.0: + the extension version check.
 // v0.11.1: + /api/matrix-stats (Client Platform Matrix feed; SHA-256-checked secret in the route).
-const OPEN_API = ["/api/auth/", "/api/ping", "/api/matrix-stats", "/api/review/", "/api/media/", "/api/connect/", "/api/x-connect/", "/api/li-connect/", "/api/cron/", "/api/extension/version", "/api/extension/publish/", "/api/publishing/oauth/x/callback", "/api/publishing/oauth/linkedin/callback"];
+const OPEN_API = ["/api/auth/", "/api/ping", "/api/matrix-stats", "/api/review/", "/api/kb-review/", "/api/media/", "/api/connect/", "/api/x-connect/", "/api/li-connect/", "/api/cron/", "/api/extension/version", "/api/extension/publish/", "/api/publishing/oauth/x/callback", "/api/publishing/oauth/linkedin/callback"];
 
 function startsWithAny(pathname: string, prefixes: string[]): boolean {
   return prefixes.some((p) => (p.endsWith("/") ? pathname.startsWith(p) : pathname === p || pathname.startsWith(p + "/")));

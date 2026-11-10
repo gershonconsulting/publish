@@ -1,10 +1,26 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-09 (v0.14.1)
+Last updated: 2026-11-10 (v0.16.0)
 
 ## Deploy route
 Merge to `main` does NOT deploy. Deploy = add a line to `.deploy/publish.txt` on
 social repo branch `deploy/publish` (workflow "Deploy sibling platform").
 Check live: GET https://publish.gershon.ai/api/ping. Merges need Olivier's "ship it".
+
+## v0.16.0 — Knowledge validation, two levels (branch feat/v0.16.0-knowledge-validation)
+Olivier 2026-11-10: the client must validate everything the Knowledge Base holds, by private
+link like content review, after an internal check by the campaign owner (Nicolette).
+1. Knowledge Base → company → "Validation": internal link (ki_…) and client link (kc_…), Copy / Open / New link.
+2. /kb-review/<token> (public, token is the access): one card per section (value prop, competitive,
+   each ICP, house style if written): Correct / Needs changes + comment. Internal link can also
+   correct the text (saved to the KB as a manual edit, marked correct).
+3. Client link answers "Almost ready" until every section passed the internal check (releasedAt).
+4. A verdict is tied to the section text (fingerprint): editing a section sends it back to "To check".
+5. PUB-214 to the team inbox on "Needs changes" and when a level is complete. Publish never emails the links.
+Storage: OrgSetting kbval:<clientId>, kbreview_internal:<clientId>, kbreview_client:<clientId>. No migration.
+Logic: lib/kb-validation-logic.ts (tests/kb-validation.test.mts 6/6); DB + mail: lib/kb-validation.ts.
+- ✅ tsc clean, tests 55/55, next build OK
+- ❌ Merge + deploy (needs Olivier's OK), then mint Flying Secoya links and check them live
+- ❌ Nicolette reviews Flying Secoya; then the client link goes to Pauline and Charles (Olivier sends)
 
 ## v0.14.0 — posting on people's personal LinkedIn profiles (branch feat/v0.14.0-personal-linkedin)
 How it works (same as Cloud Campaign "Linked Accounts"):

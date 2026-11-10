@@ -11,13 +11,18 @@
  * v0.10.0 — 4th section "House Style": the company's own posts collected by
  * social.gershon.ai from BEFORE Gershon took over (numbers, best posts) and a
  * style guide drafted from them, so our posts keep the company's voice.
+ *
+ * v0.16.0 — "Validation": two private links per company. The team member
+ * running the campaign checks every section first (internal link); then the
+ * client confirms or corrects each section (client link, open once the
+ * internal check is complete). Publish never emails these links.
  */
 
 import { useSelectedClient } from "@/lib/selected-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/layout/header";
-import { Building2, ChevronDown, ChevronRight, ClipboardPaste, FileUp, History, Loader2, Plus, Save, Sparkles, Swords, Target, Trash2, Wand2 } from "lucide-react";
+import { BadgeCheck, Building2, ChevronDown, ChevronRight, ClipboardPaste, Copy, FileUp, History, Loader2, Plus, RefreshCw, Save, Sparkles, Swords, Target, Trash2, Wand2 } from "lucide-react";
 
 type Source = "ai" | "manual";
 type Icp = { id: string; name: string; description: string; source: Source; updatedAt: string; from?: string };
@@ -52,8 +57,8 @@ type Snapshot = {
   windowDays: number;
 } | null;
 type Company = { id: string; name: string; clientType: string; hasValueProp: boolean; hasCompetitive: boolean; hasStyle?: boolean; icps: { id: string; name: string }[] };
-type View = "valueProp" | "competitive" | "icps" | "style";
-const VIEW_TITLE: Record<View, string> = { valueProp: "Value Prop", competitive: "Competitive Landscape", icps: "ICPs", style: "House Style (before Gershon)" };
+type View = "valueProp" | "competitive" | "icps" | "style" | "validation";
+const VIEW_TITLE: Record<View, string> = { valueProp: "Value Prop", competitive: "Competitive Landscape", icps: "ICPs", style: "House Style (before Gershon)", validation: "Validation" };
 
 function AiTag({ s }: { s: Source }) {
   return s === "ai" ? <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200">AI draft</span> : null;
@@ -206,6 +211,7 @@ export function KnowledgeBaseClient() {
                       ["competitive", Swords, "Competitive Landscape", c.hasCompetitive],
                       ["icps", Target, `ICPs (${c.icps.length})`, c.icps.length > 0],
                       ["style", History, "House Style", !!c.hasStyle],
+                      ["validation", BadgeCheck, "Validation", true],
                     ] as const).map(([v, Icon, label, filled]) => (
                       <button key={v} onClick={() => setView(v)} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm ${view === v ? "bg-gray-900 text-white" : "text-gray-700 hover:bg-gray-50"}`}>
                         <Icon size={14} /> {label}
@@ -239,7 +245,7 @@ export function KnowledgeBaseClient() {
                 {view === "valueProp" && <AiTag s={kb.valueProp.source} />}
                 {view === "competitive" && <AiTag s={kb.competitive.source} />}
                 {view === "style" && <AiTag s={kb.style.source} />}
-                {canWrite && (
+                {canWrite && view !== "validation" && (
                   <div className="ml-auto flex gap-2">
                     <button disabled={!!busy} onClick={() => draft(view)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-lg disabled:opacity-50">
                       {busy === "draft:" + view ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} Draft with Intelligence
@@ -321,6 +327,8 @@ export function KnowledgeBaseClient() {
                   </div>
                 </div>
               )}
+
+              {view === "validation" && <ValidationView clientId={open} company={current.name} canWrite={canWrite} dirty={dirty} />}
 
               {view === "style" && (
                 <HouseStyleView
@@ -549,6 +557,112 @@ function HouseStyleView({ company, kb, history, canWrite, onText, onTakeover }: 
               ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Validation (v0.16.0) ────────────────────────────────────────────────────────
+type VStatus = "pending" | "ok" | "changes";
+type VVerdict = { status: "ok" | "changes"; comment: string; name: string | null; at: string } | null;
+type VSummary = { total: number; ok: number; changes: number; pending: number; complete: boolean };
+type Validation = {
+  releasedAt: string | null;
+  internal: { url: string; summary: VSummary };
+  client: { url: string; summary: VSummary; open: boolean };
+  sections: Array<{ id: string; title: string; internal: { status: VStatus; verdict: VVerdict }; client: { status: VStatus; verdict: VVerdict } }>;
+};
+
+function VDot({ s }: { s: VStatus }) {
+  const cls = s === "ok" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : s === "changes" ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-gray-50 text-gray-500 border-gray-200";
+  return <span className={`text-[11px] px-1.5 py-0.5 rounded border ${cls}`}>{s === "ok" ? "Correct" : s === "changes" ? "Changes asked" : "To check"}</span>;
+}
+
+/** Two private links per company: the team's internal check first, then the client. */
+function ValidationView({ clientId, company, canWrite, dirty }: { clientId: string; company: string; canWrite: boolean; dirty: boolean }) {
+  const [v, setV] = useState<Validation | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setErr(null);
+    try {
+      const r = await fetch(`/api/knowledge-base/${clientId}/validation`, { cache: "no-store" });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.success) throw new Error(j?.error || `Could not load (HTTP ${r.status}).`);
+      setV(j.data);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Could not load."); }
+  }, [clientId]);
+  useEffect(() => { setV(null); void load(); }, [load]);
+
+  async function rotate(level: "internal" | "client") {
+    if (!confirm(`Make a new ${level} link for ${company}? The current one stops working.`)) return;
+    setBusy(level);
+    try {
+      const r = await fetch(`/api/knowledge-base/${clientId}/validation`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rotate: level }) });
+      const j = await r.json().catch(() => null);
+      if (!j?.success) throw new Error(j?.error || "Could not make a new link.");
+      setV(j.data);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Could not make a new link."); }
+    setBusy(null);
+  }
+  async function copy(level: string, url: string) {
+    try { await navigator.clipboard.writeText(url); setCopied(level); setTimeout(() => setCopied(null), 2000); } catch { window.prompt("Copy the link:", url); }
+  }
+
+  if (err && !v) return <p className="text-sm text-red-700">{err} <button onClick={() => void load()} className="underline ml-1">Retry</button></p>;
+  if (!v) return <Loader2 className="animate-spin text-gray-400" />;
+
+  const card = (level: "internal" | "client", title: string, hint: string, url: string, s: VSummary, locked: boolean) => (
+    <div className="rounded-lg border border-gray-200 p-4 space-y-2">
+      <div className="flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+        <span className={`ml-auto text-xs ${s.complete ? "text-emerald-700 font-semibold" : "text-gray-600"}`}>
+          {s.complete ? "All validated" : locked ? "Opens after the internal check" : `${s.ok} of ${s.total} validated${s.changes ? `, ${s.changes} with changes asked` : ""}`}
+        </span>
+      </div>
+      <p className="text-xs text-gray-500">{hint}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} className="flex-1 min-w-[240px] text-xs font-mono border border-gray-300 rounded-md px-2 py-1.5 bg-gray-50" />
+        <button onClick={() => void copy(level, url)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg">
+          <Copy size={14} /> {copied === level ? "Copied" : "Copy link"}
+        </button>
+        <a href={url} target="_blank" rel="noreferrer" className="px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg">Open</a>
+        {canWrite && (
+          <button disabled={!!busy} onClick={() => void rotate(level)} title="New link; the current one stops working" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 border border-gray-200 rounded-lg disabled:opacity-50">
+            {busy === level ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} New link
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  const line = (x: { status: VStatus; verdict: VVerdict }) =>
+    x.verdict && x.status !== "pending" ? (
+      <div className="text-[11px] text-gray-500">{x.verdict.name || "Reviewer"}, {new Date(x.verdict.at).toLocaleDateString()}{x.verdict.comment ? `: “${x.verdict.comment}”` : ""}</div>
+    ) : null;
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-gray-500">
+        Step 1: the team member running the campaign checks every section with the internal link and can correct the text there. Step 2: once all sections are correct, send the client its link. Publish never emails these links; copy them into your own email. Editing a section here sends it back to “To check” for both.
+      </p>
+      {dirty && <p className="text-xs text-amber-700">You have unsaved edits in another section. Save them first so the reviewers see them.</p>}
+      {err && <p className="text-xs text-red-700">{err}</p>}
+      {card("internal", "1. Internal check (Gershon team)", "For the campaign owner. Validates or corrects each section before the client sees it.", v.internal.url, v.internal.summary, false)}
+      {card("client", "2. Client review", v.client.open ? "Open: the client can confirm or correct each section." : "Locked until every section is correct in the internal check. The link already exists, so you can prepare the email.", v.client.url, v.client.summary, !v.client.open)}
+      <table className="w-full text-sm">
+        <thead className="text-left text-gray-500"><tr><th className="py-1">Section</th><th>Internal</th><th>Client</th></tr></thead>
+        <tbody>
+          {v.sections.map((s) => (
+            <tr key={s.id} className="border-t border-gray-100 align-top">
+              <td className="py-2 pr-3 font-medium">{s.title}</td>
+              <td className="py-2 pr-3"><VDot s={s.internal.status} />{line(s.internal)}</td>
+              <td className="py-2"><VDot s={s.client.status} />{line(s.client)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

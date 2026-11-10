@@ -51,7 +51,7 @@ export function Avatar({ c, size = 24 }: { c: MenuClient; size?: number }) {
  * client opens its dashboard. Leaving a client on a page that only makes sense
  * for one client (Content & review, Knowledge Base) goes to the global dashboard.
  */
-const CLIENT_PAGES = ["/dashboard", "/publishing", "/publishing/calendar", "/publishing/funnel", "/publishing/accounts", "/knowledge-base"];
+const CLIENT_PAGES = ["/dashboard", "/published", "/publishing", "/publishing/calendar", "/publishing/funnel", "/publishing/accounts", "/knowledge-base"];
 const CLIENT_ONLY = ["/publishing", "/knowledge-base"];
 
 export function ClientList() {

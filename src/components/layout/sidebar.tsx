@@ -9,7 +9,7 @@ import { SocialMark, SocialWordmark } from "@/components/brand/social-mark";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { BarChart3, BookOpen, Bot, CalendarDays, LayoutDashboard, Link2, LogOut, Puzzle, Send, Settings, Sparkles, X } from "lucide-react";
+import { BarChart3, BookOpen, Bot, CalendarDays, CheckCheck, LayoutDashboard, Link2, LogOut, Puzzle, Send, Settings, Sparkles, X } from "lucide-react";
 import { FilterPanel } from "./filter-panel";
 import { Avatar, ClientList } from "./client-list";
 import { useSelectedClient } from "@/lib/selected-client";
@@ -37,6 +37,7 @@ type NavItem = {
  */
 const globalItems: NavItem[] = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/published", icon: CheckCheck, label: "Published" }, // v0.14.0: what went out each day
   { href: "/publishing/calendar", icon: CalendarDays, label: "Calendar" },
   { href: "/publishing/funnel", icon: BarChart3, label: "Content funnel" },
   { href: "/publishing/accounts", icon: Link2, label: "Connections" },
@@ -45,6 +46,7 @@ const globalItems: NavItem[] = [
 
 const clientItems: NavItem[] = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/published", icon: CheckCheck, label: "Published" }, // v0.14.0
   { href: "/publishing", icon: Send, label: "Content & review" },
   { href: "/publishing/calendar", icon: CalendarDays, label: "Calendar" },
   { href: "/publishing/funnel", icon: BarChart3, label: "Content funnel" },

@@ -11,7 +11,8 @@ taken from the client's website or from what they shared with us.
 - ✅ Validation: a "Brand identity" section (with swatches on /kb-review); internal reviewer can correct it as text.
 - ✅ Autopilot / revisions get the brand in the prompt; pictures get the brand colours as a palette hint.
 - ✅ tsc clean, tests 68/68 (tests/brand.test.mts 6/6), next build OK
-- ❌ Merge + deploy after Olivier's "ship it"; then "Read from website" on each client and check
+- ✅ Merged (#21, publish@dc34534) and deployed 2026-11-10 (social deploy/publish @deea8fe; /api/ping 0.18.0, build 33)
+- ❌ "Read from website" on each client and check the colours; load brand books clients shared
 
 ## v0.16.2 — client review page shows only the external exchange
 Olivier 2026-11-10: internal exchanges about a post must not be shown to the client.

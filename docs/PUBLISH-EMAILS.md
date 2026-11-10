@@ -8,7 +8,11 @@ Two families: **1xx = client emails**, **2xx = internal emails**. Code: `src/lib
 - From (internal): `"GC Publish · publish.gershon.ai" <publish@gershon.ai>`
 - From (client):   `"GC Publish · publish.gershon.ai" <publish@gershon.ai>` (v0.11.2; was `"Gershon Consulting · publish.gershon.ai"`)
 - Reply-To: social@gershonconsulting.com · BCC audit copy: social@gershonconsulting.com
-- Subject starts with the number: `[PUB-201] Content inventory: …`
+- Internal emails: subject starts with the number: `[PUB-201] Content inventory: …`
+- Client emails (PUB-101…106, v0.16.1, Olivier 2026-11-10): subject is always
+  `Gershon Consulting Publish - <Company> (<validator first name>) - <Month to post>`,
+  e.g. `Gershon Consulting Publish - Altavia (Alexandre) - November 2026` — no number in the
+  subject (it stays in the body header/footer). Built by `clientSubject()` in lib/publishing-mail.ts.
 - Header + footer name publish.gershon.ai, the number and Client/Internal; every link opens publish.gershon.ai
   on the right client (`?client=`) and post (`?item=`). Client review pages: `publish.gershon.ai/review/<token>`.
 

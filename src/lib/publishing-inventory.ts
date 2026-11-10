@@ -23,7 +23,7 @@
 import prisma from "@/lib/db-raw";
 import { objectivesFor } from "@/lib/campaigns/objectives";
 import { alertTeam, orgAlertStore, esc, getTarget, quote, reviewToken, reviewUrl, sendMail, PUBLISHING_CLIENT_WHERE } from "@/lib/publishing";
-import { publishLink } from "@/lib/publishing-mail";
+import { clientSubject, publishLink } from "@/lib/publishing-mail";
 import { criticalUnchanged, noChangeLine, saveCritical } from "@/lib/alert-dedupe";
 import { inventoryChanged, inventorySig, saveInventorySig } from "@/lib/sweep-digest";
 
@@ -128,7 +128,7 @@ async function setStamp(orgId: string, key: string, value: string): Promise<void
 export async function remindReviewers(orgId: string, now = Date.now()): Promise<{ clientId: string; to: string; count: number }[]> {
   const waiting = await prisma.contentItem.findMany({
     where: { organizationId: orgId, status: "IN_REVIEW", clientId: { not: null } },
-    select: { id: true, clientId: true, text: true, submittedAt: true, updatedAt: true },
+    select: { id: true, clientId: true, text: true, submittedAt: true, updatedAt: true, scheduledAt: true },
     orderBy: { submittedAt: "asc" },
   });
   const byClient = new Map<string, typeof waiting>();
@@ -149,7 +149,11 @@ export async function remindReviewers(orgId: string, now = Date.now()): Promise<
     const hi = t.reviewerName ? `Hi ${esc(t.reviewerName.split(/\s+/)[0])},` : "Hello,";
     const ok = await sendMail(
       t.reviewerEmail,
-      `Reminder: ${allWaiting.length} post${allWaiting.length === 1 ? "" : "s"} waiting for your approval`,
+      clientSubject(
+        (await prisma.client.findFirst({ where: { id: clientId }, select: { name: true } }))?.name,
+        t.reviewerName,
+        allWaiting.map((w) => w.scheduledAt).filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime())[0] ?? new Date(now),
+      ),
       `<p>${hi}</p>
        <p>${allWaiting.length} post${allWaiting.length === 1 ? " is" : "s are"} waiting for your review — the oldest for ${oldest} days.
        To keep your publishing calendar on track we need them approved (or your changes) soon.</p>

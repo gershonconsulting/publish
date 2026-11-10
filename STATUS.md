@@ -1,12 +1,24 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-10 (v0.16.0)
+Last updated: 2026-11-10 (v0.17.0)
+
+## v0.16.2 — client review page shows only the external exchange
+Olivier 2026-11-10: internal exchanges about a post must not be shown to the client.
+- ✅ /api/review/:token filters events with lib/review-thread.ts (tests/review-thread.test.mts):
+  client comments/approvals + new versions written from a client comment only.
+- ✅ Clear "Your comments on this post" box per post; "Your exchange with us" above it.
+
+## v0.16.1 — client email subject (branch fix/v0.16.1-client-email-subject)
+- ✅ Every email to a client validator (PUB-101…106) has the subject
+  "Gershon Consulting Publish - <Company> (<first name>) - <Month to post>" (Olivier 2026-11-10).
+  Month = month the posts are for (New York). Internal emails keep [PUB-2xx]. Tests 54/54, tsc clean.
+- ❌ Merge + deploy after Olivier's "ship it"
 
 ## Deploy route
 Merge to `main` does NOT deploy. Deploy = add a line to `.deploy/publish.txt` on
 social repo branch `deploy/publish` (workflow "Deploy sibling platform").
 Check live: GET https://publish.gershon.ai/api/ping. Merges need Olivier's "ship it".
 
-## v0.16.0 — Knowledge validation, two levels (branch feat/v0.16.0-knowledge-validation)
+## v0.17.0 — Knowledge validation, two levels (branch feat/v0.16.0-knowledge-validation, shipped as v0.17.0)
 Olivier 2026-11-10: the client must validate everything the Knowledge Base holds, by private
 link like content review, after an internal check by the campaign owner (Nicolette).
 1. Knowledge Base → company → "Validation": internal link (ki_…) and client link (kc_…), Copy / Open / New link.

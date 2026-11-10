@@ -37,7 +37,7 @@ import { objectivesFor, saveObjectives } from "@/lib/campaigns/objectives";
 import {
   addEvent, alertTeam, destinationsOf, esc, notifyReadyForPublishing, sendMail, validatorOf, getSettings, getTarget, LINKEDIN_MAX, MEDIA_SELECT, reviewToken, reviewUrl, scheduleItem, xLength, xMax,
 } from "@/lib/publishing";
-import { publishLink } from "@/lib/publishing-mail";
+import { clientSubject, publishLink } from "@/lib/publishing-mail";
 import { submitForReview } from "@/lib/publishing-review";
 import { aboutOf } from "@/lib/reports/ops/intelligence";
 import { clean, fitTo } from "@/lib/x-fit";
@@ -491,7 +491,7 @@ async function submitMonth(orgId: string, s: AutopilotSettings, w: PlanWindow): 
       .join("");
     const ok = await sendMail(
       v.email,
-      `${c.name} — ${w.label}: ${n} posts to validate`,
+      clientSubject(c.name, v.isTeam ? null : v.name, w.label),
       `<p>${hi}</p>
        <p>The <b>${esc(w.label)}</b> content of <b>${esc(c.name)}</b> is ready for your validation — ${n} posts, one per day (text, X version and picture):</p>
        <ul>${list}</ul>

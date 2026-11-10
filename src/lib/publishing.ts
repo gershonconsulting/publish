@@ -470,7 +470,8 @@ export async function sendMail(
         from: publishFrom(aud),
         reply_to: PUBLISH_REPLY_TO,
         to: [to],
-        subject: numberedSubject(mail, subject),
+        // v0.16.1: client emails keep Olivier's fixed subject (clientSubject), no [PUB-1xx] prefix.
+        subject: aud === "client" ? subject : numberedSubject(mail, subject),
         html: publishHtml(mail, aud, html, cta),
         tags: [{ name: "platform", value: "publish" }, { name: "email", value: PUBLISH_MAILS[mail].no.replace("-", "_") }],
       })),

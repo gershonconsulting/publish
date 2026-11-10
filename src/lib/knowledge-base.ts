@@ -27,6 +27,9 @@ import { getCompetitorIds } from "@/lib/competitors/store";
 import { aboutOf } from "@/lib/reports/ops/intelligence";
 import { houseStyle } from "@/lib/house-style";
 import { statsForPrompt } from "@/lib/house-style-stats";
+import { EMPTY_BRAND, brandForPrompt, paletteForImage, brandFromFindings, cleanBrand, extractFromSite, findingsForPrompt, hasBrand, type Brand } from "@/lib/brand";
+
+export type { Brand } from "@/lib/brand";
 
 export type Source = "ai" | "manual";
 export type Icp = { id: string; name: string; description: string; source: Source; updatedAt: string; from?: string };
@@ -40,12 +43,15 @@ export type KnowledgeBase = {
    * of the company's own pre-takeover posts (the writers imitate those).
    */
   style: { text: string; source: Source; updatedAt: string | null; takeover: string | null; habits?: string; examples?: string[] };
+  /** v0.18.0 — colour codes, fonts, logo and brand rules, from the website or what the client shared (lib/brand.ts). */
+  brand: Brand;
 };
 const EMPTY: KnowledgeBase = {
   valueProp: { text: "", source: "manual", updatedAt: null },
   competitive: { notes: "", source: "manual", updatedAt: null },
   icps: [],
   style: { text: "", source: "manual", updatedAt: null, takeover: null },
+  brand: EMPTY_BRAND,
 };
 const isDay = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
 const key = (clientId: string) => `kb:${clientId}`;
@@ -62,6 +68,7 @@ export async function getKB(orgId: string, clientId: string): Promise<KnowledgeB
       competitive: { ...EMPTY.competitive, ...(v.competitive || {}) },
       icps: Array.isArray(v.icps) ? v.icps.filter((i) => i && i.name).slice(0, 12) : [],
       style: { ...EMPTY.style, ...(v.style || {}) },
+      brand: cleanBrand(v.brand),
     };
   } catch {
     return structuredClone(EMPTY);
@@ -88,6 +95,7 @@ export async function saveKB(orgId: string, clientId: string, kb: KnowledgeBase)
       habits: String(kb.style?.habits || "").slice(0, 1500),
       examples: (Array.isArray(kb.style?.examples) ? kb.style!.examples : []).map((x) => String(x).slice(0, 500)).slice(0, 4),
     },
+    brand: cleanBrand(kb.brand),
   };
   const value = JSON.stringify(clean);
   await prisma.orgSetting.upsert({
@@ -179,7 +187,7 @@ export function snapshotForPrompt(s: CompetitiveSnapshot): string {
 
 // ── Intelligence drafts ──────────────────────────────────────────────────────
 
-export type Section = "valueProp" | "competitive" | "icps" | "style" | "all";
+export type Section = "valueProp" | "competitive" | "icps" | "style" | "brand" | "all";
 
 async function ownPosts(clientId: string): Promise<string[]> {
   const rows = await prisma.socialPost.findMany({
@@ -213,6 +221,16 @@ export async function draftKB(orgId: string, clientId: string, section: Section 
     icps: (section === "all" || section === "icps") && (overwrite || !kb.icps.length),
     style: (section === "all" || section === "style") && (overwrite || !kb.style.text.trim()),
   };
+  // v0.18.0: brand from the website — its own call, only when asked or empty.
+  let brandChanged = false;
+  if ((section === "brand" || (section === "all" && !hasBrand(kb.brand))) && (overwrite || !hasBrand(kb.brand))) {
+    const b = await draftBrandFromSite(client.name, client.website).catch((e) => {
+      if (section === "brand") throw e;
+      return null;
+    });
+    if (b) { kb.brand = b; brandChanged = true; }
+    if (section === "brand") return saveKB(orgId, clientId, kb);
+  }
   if (want.style) {
     // Its own call: the style guide comes ONLY from the company's pre-takeover posts.
     const drafted = await draftStyle(orgId, clientId, client.name, kb.style.takeover).catch((e) => {
@@ -224,7 +242,7 @@ export async function draftKB(orgId: string, clientId: string, section: Section 
       if (!want.valueProp && !want.competitive && !want.icps) return saveKB(orgId, clientId, kb);
     }
   }
-  if (!want.valueProp && !want.competitive && !want.icps) return want.style ? saveKB(orgId, clientId, kb) : kb;
+  if (!want.valueProp && !want.competitive && !want.icps) return want.style || brandChanged ? saveKB(orgId, clientId, kb) : kb;
 
   const about = aboutOf(client.name, client.industry) || client.notes?.slice(0, 400) || null;
   const posts = await ownPosts(clientId);
@@ -306,6 +324,7 @@ export function kbForPrompt(kb: KnowledgeBase): string {
   if (kb.style.examples?.length) out.push(`POSTS THE COMPANY WROTE ITSELF before we took over — its own voice; match it, never copy:\n---\n${kb.style.examples.join("\n---\n")}`);
   if (kb.valueProp.text.trim()) out.push(`VALUE PROPOSITION:\n${kb.valueProp.text.trim().slice(0, 1500)}`);
   if (kb.competitive.notes.trim()) out.push(`COMPETITIVE POSITIONING:\n${kb.competitive.notes.trim().slice(0, 1200)}`);
+  if (hasBrand(kb.brand)) out.push(brandForPrompt(kb.brand));
   return out.join("\n\n");
 }
 
@@ -375,4 +394,123 @@ export async function icpDocs(orgId: string, clientId: string): Promise<Array<{ 
     .map((r) => { try { const v = JSON.parse(r.value) as { from: string; uploadedAt: string; text: string }; return { from: v.from, uploadedAt: v.uploadedAt, chars: v.text.length }; } catch { return null; } })
     .filter((x): x is { from: string; uploadedAt: string; chars: number } => !!x)
     .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+}
+
+// ── Brand identity (v0.18.0) ─────────────────────────────────────────────────
+//
+// Olivier, 2026-11-10 (a client's remark): "color codes and related branding
+// things should also be in the Knowledge section, take the ones we have from
+// their website or what they shared with us."
+
+const UA = "Mozilla/5.0 (compatible; GershonPublish/1.0; +https://publish.gershon.ai)";
+
+async function getText(url: string, max = 800000): Promise<string> {
+  const r = await fetch(url, { headers: { "User-Agent": UA, Accept: "text/html,text/css,*/*" }, redirect: "follow", signal: AbortSignal.timeout(12000) });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return (await r.text()).slice(0, max);
+}
+
+const BRAND_SYSTEM = (name: string) => `You are a brand designer writing the brand identity sheet of ${name} for the agency that writes and illustrates its social-media posts.
+Use ONLY the material given. Never invent a colour code: every hex you return must appear in the material. If the material says a colour's name or role, use it; otherwise give a plain descriptive name (e.g. "Deep navy").
+Answer ONLY with JSON:
+{ "colors": [ { "name": string, "hex": "#RRGGBB", "role": string } ],   // 2-8 colours, the brand's main colour first; role e.g. "Primary", "Accent / buttons", "Text", "Background"
+  "fonts": string,          // the brand fonts, e.g. "Montserrat (headings), Open Sans (body)"; "" if unknown
+  "logoUrl": string,        // a logo image URL from the material, or ""
+  "notes": string }         // 3-8 short lines of brand rules useful for posts and pictures: look & feel, logo use, imagery style, what to avoid. Only what the material supports.`;
+
+function parseBrandJson(text: string): Partial<Brand> | null {
+  const a = text.indexOf("{"), b = text.lastIndexOf("}");
+  if (a < 0 || b <= a) return null;
+  try {
+    const v = JSON.parse(text.slice(a, b + 1)) as Partial<Brand> & { notes?: unknown };
+    if (Array.isArray(v.notes)) v.notes = (v.notes as unknown[]).join("\n");
+    return v as Partial<Brand>;
+  } catch {
+    return null;
+  }
+}
+
+/** Keep only colour codes that really appear in the source (the model must not invent any). */
+function onlyKnownHexes(b: Partial<Brand>, allowed: Set<string>): Partial<Brand> {
+  return { ...b, colors: (b.colors || []).filter((c) => { const h = String(c?.hex || "").toUpperCase(); return allowed.has(h.length === 4 ? "#" + h.slice(1).split("").map((x) => x + x).join("") : h); }) };
+}
+
+/** The brand read from the company's website: colours, fonts, logo — then named and explained by Intelligence. */
+export async function draftBrandFromSite(name: string, website: string | null): Promise<Brand> {
+  if (!website?.trim()) throw new Error(`No website is set for ${name}. Add it to the company, or upload what the client shared.`);
+  const url = /^https?:\/\//i.test(website) ? website.trim() : `https://${website.trim()}`;
+  let html: string;
+  try {
+    html = await getText(url);
+  } catch (e) {
+    throw new Error(`Could not open ${url} (${e instanceof Error ? e.message : "error"}). Upload what the client shared instead.`);
+  }
+  const first = extractFromSite(html, [], url);
+  const css = (await Promise.all(first.stylesheets.map((u) => getText(u, 600000).catch(() => "")))).filter(Boolean);
+  const f = extractFromSite(html, css, url);
+  const from = `Website ${url}`;
+  const now = new Date().toISOString();
+  const base = brandFromFindings(f, from, now);
+  if (!f.colors.length && !f.themeColor && !f.namedVars.length && !f.fonts.length) {
+    throw new Error(`No colour or font could be read on ${url} (the site may build its look with scripts). Upload what the client shared instead.`);
+  }
+  const allowed = new Set([...f.colors, ...f.neutrals].map((c) => c.hex).concat(f.namedVars.map((v) => v.hex), f.themeColor ? [f.themeColor] : []));
+  try {
+    const ai = { ...(await getAISettings()), model: MODEL };
+    const out = await runChat(ai, BRAND_SYSTEM(name), `MATERIAL — read from ${url}:\n${findingsForPrompt(f)}`, 1500);
+    const parsed = parseBrandJson(out.text);
+    if (parsed) {
+      const b = cleanBrand({ ...onlyKnownHexes(parsed, allowed), source: "ai", from, updatedAt: now });
+      if (b.colors.length) return { ...b, fonts: b.fonts || base.fonts, logoUrl: b.logoUrl || base.logoUrl };
+    }
+  } catch {
+    /* fall back to the raw findings */
+  }
+  return base;
+}
+
+/**
+ * What the client shared (brand book, guidelines, pasted text): it wins over
+ * the website. Colours found in the document replace the current ones.
+ */
+export async function importBrand(orgId: string, clientId: string, text: string, from: string): Promise<KnowledgeBase> {
+  const client = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId }, select: { name: true } });
+  if (!client) throw new Error("Company not found");
+  const clean = text.replace(/\r\n/g, "\n").trim();
+  if (clean.length < 10) throw new Error("There is not enough text to read a brand from.");
+  const allowed = new Set<string>();
+  for (const m of clean.matchAll(/#?\b([0-9a-f]{6}|[0-9a-f]{3})\b/gi)) {
+    if (!/[a-f]/i.test(m[1]) && !m[0].startsWith("#")) continue; // a bare number is not a colour
+    let h = m[1].toUpperCase();
+    if (h.length === 3) h = h.split("").map((x) => x + x).join("");
+    allowed.add("#" + h);
+  }
+  for (const m of clean.matchAll(/rgb\s*\(?\s*(\d{1,3})[\s,/]+(\d{1,3})[\s,/]+(\d{1,3})/gi)) {
+    allowed.add("#" + [m[1], m[2], m[3]].map((x) => Math.min(255, +x).toString(16).padStart(2, "0")).join("").toUpperCase());
+  }
+  const ai = { ...(await getAISettings()), model: MODEL };
+  let parsed: Partial<Brand> | null = null;
+  for (let i = 0; i < 2 && !parsed; i++) {
+    const out = await runChat(ai, BRAND_SYSTEM(client.name) + "\nIf the document gives colours only as RGB or CMYK, convert RGB to hex; skip CMYK-only colours.", `DOCUMENT shared by the client (${from}):\n${clean.slice(0, 24000)}`, 1800);
+    parsed = parseBrandJson(out.text);
+  }
+  if (!parsed) throw new Error("Intelligence gave no readable answer. Try again.");
+  const kb = await getKB(orgId, clientId);
+  const got = cleanBrand({ ...onlyKnownHexes(parsed, allowed), source: "ai", from: `Shared by the client: ${from}`, updatedAt: new Date().toISOString() });
+  if (!hasBrand(got)) throw new Error("No colour code, font or brand rule was found in this document.");
+  kb.brand = {
+    ...got,
+    colors: got.colors.length ? got.colors : kb.brand.colors,
+    fonts: got.fonts || kb.brand.fonts,
+    logoUrl: got.logoUrl || kb.brand.logoUrl,
+    notes: got.notes || kb.brand.notes,
+  };
+  await prisma.orgSetting.create({ data: { organizationId: orgId, key: `kb-brand-doc:${clientId}:${Date.now()}`, value: JSON.stringify({ from, uploadedAt: new Date().toISOString(), text: clean.slice(0, 60000) }) } });
+  return saveKB(orgId, clientId, kb);
+}
+
+/** The picture colour hint for a company (empty when no brand colours are known). */
+export async function brandPaletteFor(orgId: string, clientId: string | null | undefined): Promise<string> {
+  if (!clientId) return "";
+  return paletteForImage((await getKB(orgId, clientId)).brand);
 }

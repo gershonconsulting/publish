@@ -48,7 +48,9 @@ function parse(text: string): { change?: boolean; linkedin?: string; x?: string;
 /** Replace the post's picture with one made by Workers AI (same as Autopilot). */
 async function newPicture(orgId: string, contentId: string, idea: string): Promise<boolean> {
   const { makePicture } = await import("@/lib/autopilot");
-  const pic = await makePicture(idea);
+  const { brandPaletteFor } = await import("@/lib/knowledge-base");
+  const item = await prisma.contentItem.findFirst({ where: { id: contentId }, select: { clientId: true } });
+  const pic = await makePicture(idea, await brandPaletteFor(orgId, item?.clientId).catch(() => ""));
   if (!pic) return false;
   const b = new Uint8Array(16);
   crypto.getRandomValues(b);

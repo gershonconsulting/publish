@@ -13,7 +13,7 @@ import { Check, Loader2, MessageSquare, PencilLine } from "lucide-react";
 
 type Verdict = { status: "ok" | "changes"; comment: string; name: string | null; at: string; fp: string };
 type Section = {
-  id: string; kind: "valueProp" | "competitive" | "icp" | "style"; title: string; text: string;
+  id: string; kind: "valueProp" | "competitive" | "icp" | "style" | "brand"; title: string; text: string;
   source: "ai" | "manual"; updatedAt: string | null; status: "pending" | "ok" | "changes"; verdict: Verdict | null;
 };
 type Summary = { total: number; ok: number; changes: number; pending: number; complete: boolean };
@@ -25,7 +25,24 @@ const HINT: Record<Section["kind"], string> = {
   competitive: "Who you compete with and how we position you against them.",
   icp: "One of the customer profiles we write for. Each post speaks to one of them.",
   style: "How you write. We keep this voice in your posts.",
+  brand: "Your colour codes, fonts, logo and brand rules. Our posts and pictures follow them — correct any code that is wrong.",
 };
+
+/** v0.18.0: the colour codes of the brand section, shown as swatches. */
+function Swatches({ text }: { text: string }) {
+  const found = [...text.matchAll(/^[-*•]\s*(.*?):\s*(#[0-9A-Fa-f]{6})/gm)].map((m) => ({ name: m[1], hex: m[2] }));
+  if (!found.length) return null;
+  return (
+    <div className="flex flex-wrap gap-3 mb-3">
+      {found.map((c) => (
+        <div key={c.hex + c.name} className="flex items-center gap-2 text-xs text-gray-700">
+          <span className="w-7 h-7 rounded-md border border-gray-200" style={{ background: c.hex }} />
+          <span><b>{c.name}</b><br />{c.hex}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function fmt(iso: string | null) {
   return iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
@@ -167,12 +184,12 @@ function SectionCard({ sec, token, name, internal, onDone }: { sec: Section; tok
       </div>
       <div className="p-4 space-y-3">
         <p className="text-xs text-gray-500">
-          {HINT[sec.kind]} {sec.source === "ai" ? (internal ? "AI draft, not edited by the team yet" : "Drafted by our AI from your public posts") : "Written by our team"}{sec.updatedAt ? `, ${fmt(sec.updatedAt)}` : ""}.
+          {HINT[sec.kind]} {sec.source === "ai" ? (internal ? "AI draft, not edited by the team yet" : (sec.kind === "brand" ? "Read by our AI from your website or the documents you shared" : "Drafted by our AI from your public posts")) : "Written by our team"}{sec.updatedAt ? `, ${fmt(sec.updatedAt)}` : ""}.
         </p>
         {mode === "edit" ? (
           <textarea value={text} onChange={(e) => setText(e.target.value)} rows={12} className="w-full border border-gray-300 rounded-lg p-3 text-sm leading-relaxed" />
         ) : sec.text.trim() ? (
-          <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{sec.text}</div>
+          <>{sec.kind === "brand" && <Swatches text={sec.text} />}<div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{sec.text}</div></>
         ) : (
           <p className="text-sm text-amber-700">Nothing recorded here yet. Tell us what it should say.</p>
         )}

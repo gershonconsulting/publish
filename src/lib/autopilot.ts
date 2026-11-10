@@ -42,7 +42,7 @@ import { submitForReview } from "@/lib/publishing-review";
 import { aboutOf } from "@/lib/reports/ops/intelligence";
 import { clean, fitTo } from "@/lib/x-fit";
 import { stripLinks } from "@/lib/x-links";
-import { competitiveSnapshot, draftKB, getKB, kbForPrompt, snapshotForPrompt, type KnowledgeBase } from "@/lib/knowledge-base";
+import { brandPaletteFor, competitiveSnapshot, draftKB, getKB, kbForPrompt, snapshotForPrompt, type KnowledgeBase } from "@/lib/knowledge-base";
 
 export const AUTOPILOT = "Autopilot";
 const TZ = "America/New_York";
@@ -325,10 +325,11 @@ async function streamBytes(v: unknown): Promise<Uint8Array | null> {
 }
 
 /** One picture for a post, from Cloudflare Workers AI. JPEG (flux) or PNG (fallback). */
-export async function makePicture(idea: string): Promise<{ dataB64: string; mime: string; width: number; height: number } | null> {
+export async function makePicture(idea: string, palette = ""): Promise<{ dataB64: string; mime: string; width: number; height: number } | null> {
   const ai = getAIBinding();
   if (!ai) return null;
-  const prompt = `${idea}. Professional editorial photograph, natural light, realistic, high quality, business context. Absolutely no text, no words, no letters, no logos.`;
+  // v0.18.0: the brand colours from the Knowledge Base, when known.
+  const prompt = `${idea}.${palette ? ` ${palette}.` : ""} Professional editorial photograph, natural light, realistic, high quality, business context. Absolutely no text, no words, no letters, no logos.`;
   for (const model of IMAGE_MODELS) {
     try {
       const out = (await ai.run(model, model.includes("flux") ? { prompt, steps: 6 } : { prompt, width: 1024, height: 1024 })) as unknown;
@@ -354,7 +355,8 @@ function mediaKey(): string {
   return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
 async function attachPicture(orgId: string, contentId: string, idea: string): Promise<boolean> {
-  const pic = await makePicture(idea);
+  const item = await prisma.contentItem.findFirst({ where: { id: contentId }, select: { clientId: true } });
+  const pic = await makePicture(idea, await brandPaletteFor(orgId, item?.clientId).catch(() => ""));
   if (!pic) return false;
   const size = Math.floor((pic.dataB64.length * 3) / 4);
   await prisma.contentMedia.deleteMany({ where: { contentId } });

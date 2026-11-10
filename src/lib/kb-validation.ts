@@ -11,6 +11,7 @@
  */
 import prisma from "@/lib/db-raw";
 import { getKB, saveKB, type KnowledgeBase } from "@/lib/knowledge-base";
+import { parseBrandText } from "@/lib/brand";
 import { alertTeam, esc } from "@/lib/publishing";
 import { PUBLISH_ORIGIN, publishLink } from "@/lib/publishing-mail";
 import {
@@ -118,6 +119,7 @@ function withText(kb: KnowledgeBase, sectionId: string, text: string): Knowledge
   const t = text.slice(0, 6000);
   if (sectionId === "valueProp") return { ...kb, valueProp: { text: t, source: "manual", updatedAt: now } };
   if (sectionId === "competitive") return { ...kb, competitive: { notes: t, source: "manual", updatedAt: now } };
+  if (sectionId === "brand") return { ...kb, brand: parseBrandText(t, kb.brand, now) };
   if (sectionId === "style") return { ...kb, style: { ...kb.style, text: t, source: "manual", updatedAt: now } };
   if (sectionId.startsWith("icp:")) {
     const id = sectionId.slice(4);

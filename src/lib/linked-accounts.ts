@@ -41,6 +41,13 @@ export type LiConn = {
   lastError: string | null;
   /** v0.7.0: why some page names are missing (null when all are known). */
   namesStatus?: string | null;
+  /**
+   * v0.14.0: connected through a client "LinkedIn connect link" by the person
+   * themselves — posts go out as their personal profile, always through the API.
+   */
+  personal?: boolean;
+  /** v0.14.0: the person's public profile slug (linkedin.com/in/<vanity>). */
+  vanity?: string | null;
 };
 export type XConn = {
   accessToken: string;
@@ -165,8 +172,15 @@ export async function takeState(state: string): Promise<OAuthState | null> {
 const LI_VERSIONS = ["202609", "202606", "202603", "202512"];
 export const LI_SCOPES = "w_member_social w_organization_social r_organization_social rw_organization_admin";
 
-export function linkedinAuthorizeUrl(clientId: string, state: string): string {
-  const p = new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: redirectUri("linkedin"), state, scope: LI_SCOPES });
+/**
+ * v0.14.0 — a person posting on their OWN profile (client LinkedIn connect link).
+ * Only what is needed: who they are (r_basicprofile → /v2/me) and posting as
+ * them (w_member_social). Both come with the Community Management API product.
+ */
+export const LI_PERSON_SCOPES = "r_basicprofile w_member_social";
+
+export function linkedinAuthorizeUrl(clientId: string, state: string, scope: string = LI_SCOPES): string {
+  const p = new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: redirectUri("linkedin"), state, scope });
   return `https://www.linkedin.com/oauth/v2/authorization?${p}`;
 }
 
@@ -320,6 +334,47 @@ export async function linkedinConnect(code: string, by: string | null, prev: LiC
     lastError: null,
     namesStatus,
   };
+}
+
+/** v0.14.0: the signed-in member (r_basicprofile). */
+export async function liMe(token: string): Promise<{ id: string; name: string; vanity: string | null }> {
+  const r = await fetch("https://api.linkedin.com/v2/me?projection=(id,localizedFirstName,localizedLastName,vanityName)", {
+    headers: { Authorization: `Bearer ${token}`, "X-Restli-Protocol-Version": "2.0.0" },
+  });
+  const j = (await r.json().catch(() => ({}))) as { id?: string; localizedFirstName?: string; localizedLastName?: string; vanityName?: string; message?: string };
+  if (!r.ok || !j.id) throw new Error(`LinkedIn did not say who signed in: ${j.message || r.status}`);
+  return { id: j.id, name: [j.localizedFirstName, j.localizedLastName].filter(Boolean).join(" ") || "LinkedIn member", vanity: j.vanityName || null };
+}
+
+/** v0.14.0: connect a person's own profile (client LinkedIn connect link). Posts go out as them. */
+export async function linkedinConnectPerson(code: string, by: string | null): Promise<LiConn> {
+  const app = await getAppCreds("linkedin");
+  if (!appReady("linkedin", app)) throw new Error("LinkedIn connection is not available right now — Gershon Consulting has been told.");
+  const t = await liToken({ grant_type: "authorization_code", code, redirect_uri: redirectUri("linkedin"), client_id: app.clientId!, client_secret: app.clientSecret! });
+  const me = await liMe(t.access_token);
+  const urn = `urn:li:person:${me.id}`;
+  const now = Date.now();
+  return {
+    accessToken: t.access_token,
+    refreshToken: t.refresh_token || null,
+    expiresAt: new Date(now + t.expires_in * 1000).toISOString(),
+    refreshExpiresAt: t.refresh_token_expires_in ? new Date(now + t.refresh_token_expires_in * 1000).toISOString() : null,
+    memberUrn: urn,
+    connectedBy: by,
+    connectedAt: new Date(now).toISOString(),
+    authors: [{ urn, name: me.name, kind: "person", vanity: me.vanity, id: me.id }],
+    author: urn,
+    lastError: null,
+    namesStatus: null,
+    personal: true,
+    vanity: me.vanity,
+  };
+}
+
+/** v0.14.0: slug of a linkedin.com/in/<slug> address (lower case), or null. */
+export function liProfileSlug(url: string | null | undefined): string | null {
+  const m = (url || "").match(/linkedin\.com\/in\/([^/?#]+)/i);
+  return m ? decodeURIComponent(m[1]).toLowerCase() : null;
 }
 
 /** A fresh access token (refreshes when it expires within 5 days). */

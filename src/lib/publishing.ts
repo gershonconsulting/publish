@@ -35,6 +35,8 @@ import type { ClientType } from "@prisma/client";
 import prisma from "@/lib/db-raw";
 import { siteUrl } from "@/lib/site";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { flushHeld, hold, markSent, shouldHold } from "@/lib/mail-burst";
+import { mailIdempotencyKey, sortedIds, type BurstMail } from "@/lib/mail-dedupe";
 import { PUBLISH_MAILS, PUBLISH_ORIGIN, PUBLISH_REPLY_TO, numberedSubject, publishFrom, publishHtml, publishLink, type MailAudience, type PubMail } from "@/lib/publishing-mail";
 
 export const SITE = siteUrl();
@@ -496,6 +498,51 @@ export async function alertTeam(
   });
 }
 
+/**
+ * v0.18.2 — every per-click email (PUB-101, 202, 204, 214) goes through here:
+ * a deterministic Idempotency-Key per (email, New York day, event) and the
+ * per-company burst window (lib/mail-dedupe.ts): the first email goes at once,
+ * the next ones of the same kind within 10 minutes are held and sent as ONE
+ * by the next sweep(). Returns true when sent or held.
+ */
+export async function burstSend(
+  orgId: string,
+  clientId: string | null | undefined,
+  mail: BurstMail,
+  to: string | null,
+  msg: { subject: string; subjectMany: string; intro?: string; html: string; cta: { href: string; label: string }; audience?: MailAudience },
+  eventParts: Array<string | number | null | undefined>,
+  now = Date.now(),
+): Promise<boolean> {
+  if (!to) return false;
+  const audience = msg.audience ?? PUBLISH_MAILS[mail].audience;
+  const key = mailIdempotencyKey(PUBLISH_MAILS[mail].no, now, [orgId, clientId, to, ...eventParts]);
+  if (clientId && (await shouldHold(orgId, mail, clientId, now))) {
+    const held = await hold(orgId, {
+      id: key, at: now, mail, clientId, to, audience,
+      subject: msg.subject, subjectMany: msg.subjectMany, intro: msg.intro, html: msg.html, cta: msg.cta,
+    });
+    if (held) return true;
+  }
+  const ok = await sendMail(to, msg.subject, `${msg.intro || ""}${msg.html}`, msg.cta, mail, audience, { idempotencyKey: key });
+  if (ok && clientId) await markSent(orgId, mail, clientId, now);
+  return ok;
+}
+
+/** burstSend to the team inbox (PUB-204, PUB-214). */
+export async function alertTeamBurst(
+  orgId: string,
+  clientId: string | null | undefined,
+  mail: BurstMail,
+  subject: string,
+  subjectMany: string,
+  html: string,
+  link: { href: string; label: string },
+  eventParts: Array<string | number | null | undefined>,
+): Promise<boolean> {
+  return burstSend(orgId, clientId, mail, await teamRecipient(orgId), { subject, subjectMany, html, cta: link, audience: "internal" }, eventParts);
+}
+
 export function quote(text: string): string {
   return `<blockquote style="border-left:3px solid #ddd;margin:8px 0;padding:4px 12px;color:#333;white-space:pre-wrap">${esc(text.slice(0, 1200))}</blockquote>`;
 }
@@ -631,6 +678,14 @@ export function orgAlertStore(orgId: string): AlertStore {
 }
 
 export async function sweep(orgId: string): Promise<{ missed: number; failed: number; verified: number }> {
+  // v0.18.2: emails held by the burst window (PUB-101/202/204/214) go out as one once it is over.
+  try {
+    await flushHeld(
+      orgId,
+      (to, subject, html, cta, mail, audience, key) => sendMail(to, subject, html, cta, mail, audience, { idempotencyKey: key }),
+      (ids, who) => notifyReadyForPublishing(orgId, ids, who, "approved one by one", { flush: true }),
+    );
+  } catch { /* held rows stay; the next sweep tries again */ }
   // v4.60.0: due posts of companies with a connected account go out through the API first.
   try {
     const { apiPublishDue } = await import("@/lib/linked-publish");
@@ -826,11 +881,11 @@ export async function orgsWithDeliveries(): Promise<string[]> {
 // social@gershonconsulting.com saying it is ready for publishing. One email
 // per approval action (an "Approve all" or an auto-approval batch = one email).
 
-export async function notifyReadyForPublishing(orgId: string, itemIds: string[], by: string, how: string): Promise<boolean> {
+export async function notifyReadyForPublishing(orgId: string, itemIds: string[], by: string, how: string, opts: { flush?: boolean } = {}): Promise<boolean> {
   if (!itemIds.length) return false;
   const items = await prisma.contentItem.findMany({
     where: { organizationId: orgId, id: { in: itemIds } },
-    select: { id: true, clientId: true, title: true, text: true, scheduledAt: true, platforms: true },
+    select: { id: true, clientId: true, title: true, text: true, scheduledAt: true, platforms: true, version: true },
     orderBy: { scheduledAt: "asc" },
   });
   if (!items.length) return false;
@@ -846,8 +901,23 @@ export async function notifyReadyForPublishing(orgId: string, itemIds: string[],
       <td style="padding:4px 8px;border-bottom:1px solid #eee;color:#666">${esc(parsePlatforms(i.platforms).map((n) => NET_LABEL[n]).join(" + "))}</td></tr>`)
     .join("");
   const s = await getSettings(orgId);
-  return sendMail(
-    s.readyEmail || READY_EMAIL_DEFAULT,
+  const to = s.readyEmail || READY_EMAIL_DEFAULT;
+  const now = Date.now();
+  // v0.18.2: same posts (same versions) → same key → Resend delivers once a day.
+  const key = mailIdempotencyKey(PUBLISH_MAILS.READY_FOR_PUBLISHING.no, now, [orgId, to, sortedIds(items.map((i) => `${i.id}@${i.version}`))]);
+  const oneClient = clientIds.length === 1 ? clientIds[0] : null;
+  // Approvals clicked one by one: the first email goes now, the next ones within
+  // 10 minutes are held and listed together by the next sweep (flush: true).
+  if (!opts.flush && oneClient && (await shouldHold(orgId, "READY_FOR_PUBLISHING", oneClient, now))) {
+    const held = await hold(orgId, {
+      id: key, at: now, mail: "READY_FOR_PUBLISHING", clientId: oneClient, to, audience: "internal",
+      subject: "", subjectMany: "", html: "", cta: { href: publishLink("/publishing/calendar", { client: oneClient }), label: "Open the calendar in Publish" },
+      itemIds: items.map((i) => i.id), who: by,
+    });
+    if (held) return true;
+  }
+  const ok = await sendMail(
+    to,
     `Ready for publishing: ${items.length} post${items.length === 1 ? "" : "s"} validated — ${companies.join(", ")}`,
     `<p><b>${items.length} post${items.length === 1 ? " is" : "s are"} validated and ready for publishing</b> (${esc(how)} by ${esc(by)}).</p>
      <table style="border-collapse:collapse;font-size:13px">${rows}</table>
@@ -855,7 +925,11 @@ export async function notifyReadyForPublishing(orgId: string, itemIds: string[],
      <p style="color:#555;font-size:13px">They go out on their planned day through the publishing browser; Publishing → Calendar shows each one.</p>`,
     { href: publishLink("/publishing/calendar", { client: clientIds.length === 1 ? clientIds[0] : null }), label: "Open the calendar in Publish" },
     "READY_FOR_PUBLISHING",
+    undefined,
+    { idempotencyKey: key },
   );
+  if (ok && oneClient) await markSent(orgId, "READY_FOR_PUBLISHING", oneClient, now);
+  return ok;
 }
 
 /** Who validates a company's content: its reviewer, or the team when none is set. */

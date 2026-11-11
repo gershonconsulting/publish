@@ -12,7 +12,7 @@
 import prisma from "@/lib/db-raw";
 import { getKB, saveKB, type KnowledgeBase } from "@/lib/knowledge-base";
 import { parseBrandText } from "@/lib/brand";
-import { alertTeam, esc } from "@/lib/publishing";
+import { alertTeamBurst, esc } from "@/lib/publishing";
 import { PUBLISH_ORIGIN, publishLink } from "@/lib/publishing-mail";
 import {
   applyVerdict, currentVerdict, parseState, sectionsOf, statusOf, summarize, levelOfToken,
@@ -166,5 +166,8 @@ async function notify(orgId: string, clientId: string, level: Level, s: KBSectio
       (level === "internal" ? `<p>The client's review link is now open. Publish does not send it: copy it from Knowledge Base → Validation.</p>` : "")
     : `<p>${who} asked for changes on <b>${esc(s.title)}</b> (${lvl} check):</p><blockquote style="border-left:3px solid #ddd;margin:8px 0;padding:4px 10px;color:#333">${esc(v.comment).replace(/\n/g, "<br>")}</blockquote>
        <p>${summary.ok} of ${summary.total} sections validated so far. Edit the section in the Knowledge Base; it then goes back to "to check" for the reviewer.</p>`;
-  return alertTeam(orgId, subject, body, "KB_VALIDATION", { href: publishLink("/knowledge-base", { client: clientId }), label: "Open the Knowledge Base" });
+  // v0.18.2: one key per (section, level, verdict text); updates within 10 minutes are grouped.
+  return alertTeamBurst(orgId, clientId, "KB_VALIDATION", subject, `${client?.name || "Company"} knowledge: {n} updates (${lvl})`, body,
+    { href: publishLink("/knowledge-base", { client: clientId }), label: "Open the Knowledge Base" },
+    [level, completedNow ? "complete" : s.id, v.status, v.comment]);
 }

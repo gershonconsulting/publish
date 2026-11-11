@@ -78,7 +78,7 @@ export function digestHtml(entries: DigestEntry[]): string {
       escHtml(e.reason),
     ].filter(Boolean).join("<br>");
     return `<tr><td style="${td}"><b>${escHtml(e.company)}</b></td><td style="${td}">${escHtml(e.network)}</td><td style="${td}">${what}</td>
-      <td style="${td}">${detail}</td><td style="${td};white-space:nowrap"><a href="${escHtml(e.link)}" style="color:#b91c1c;font-weight:bold;text-decoration:none">Open →</a></td></tr>`;
+      <td style="${td}">${detail}</td><td style="${td};white-space:nowrap"><a href="${escHtml(e.link)}" style="color:#d11200;font-weight:bold;text-decoration:none">Open →</a></td></tr>`;
   });
   const th = "text-align:left;padding:6px 8px;border-bottom:2px solid #ddd;font-size:12px;color:#555";
   const posts = list.filter((e) => e.kind !== "signed_out").length;

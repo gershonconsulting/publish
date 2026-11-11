@@ -123,12 +123,12 @@ export function publishHtml(
   cta?: { href: string; label: string } | null,
 ): string {
   const def = PUBLISH_MAILS[mail];
-  const link = `<a href="${PUBLISH_ORIGIN}" style="color:#b91c1c;text-decoration:none;font-weight:bold">${PUBLISH_HOST}</a>`;
+  const link = `<a href="${PUBLISH_ORIGIN}" style="color:#d11200;text-decoration:none;font-weight:bold">${PUBLISH_HOST}</a>`;
   const kind = audience === "internal" ? "Internal" : "Client";
   const header = `<div style="font-size:12px;color:#777;border-bottom:1px solid #eee;padding-bottom:6px;margin-bottom:14px">
       <b style="color:#111">Publish</b> · ${link} · Email <b style="color:#111">${def.no}</b> · ${kind}</div>`;
   const button = cta
-    ? `<p style="margin:18px 0"><a href="${cta.href}" style="display:inline-block;background:#b91c1c;color:#fff;padding:11px 18px;border-radius:6px;text-decoration:none;font-weight:bold">${escHtml(cta.label)} →</a></p>
+    ? `<p style="margin:18px 0"><a href="${cta.href}" style="display:inline-block;background:#FE1B04;color:#fff;padding:11px 18px;border-radius:6px;text-decoration:none;font-weight:bold">${escHtml(cta.label)} →</a></p>
        <p style="font-size:12px;color:#777;margin-top:-8px">Direct link: <a href="${cta.href}" style="color:#555">${escHtml(cta.href)}</a></p>`
     : "";
   const footer = `<div style="font-size:11px;color:#999;border-top:1px solid #eee;padding-top:8px;margin-top:20px">

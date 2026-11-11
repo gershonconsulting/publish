@@ -9,9 +9,11 @@
 import prisma from "@/lib/db-raw";
 import type { ReviseResult } from "@/lib/publishing-revise";
 import {
-  addEvent, alertTeam, mediaCount, esc, getSettings, getTarget, notifyReadyForPublishing, quote, reviewToken, reviewUrl, sendMail, textProblems, validatorOf,
+  addEvent, alertTeam, alertTeamBurst, burstSend, mediaCount, esc, getSettings, getTarget, notifyReadyForPublishing, quote, reviewToken, reviewUrl, sendMail, textProblems, validatorOf,
 } from "@/lib/publishing";
-import { clientSubject, publishLink } from "@/lib/publishing-mail";
+import { PUBLISH_MAILS, clientSubject, publishLink } from "@/lib/publishing-mail";
+import { markSent } from "@/lib/mail-burst";
+import { mailIdempotencyKey, sortedIds } from "@/lib/mail-dedupe";
 
 /** Default batch name, CloudCampaign-style: "<Company> — <Month YYYY>". */
 export function batchName(client: string, when = new Date()): string {
@@ -42,15 +44,17 @@ export async function submitForReview(
   if (target.reviewerEmail) {
     const client = await prisma.client.findFirst({ where: { id: item.clientId }, select: { name: true } });
     const hi = target.reviewerName ? `Hi ${esc(target.reviewerName.split(/\s+/)[0])},` : "Hello,";
-    await sendMail(
-      target.reviewerEmail,
-      clientSubject(client?.name, v.isTeam ? null : target.reviewerName, item.scheduledAt),
-      `<p>${hi}</p><p>A new post is ready for your review${item.version > 1 ? ` (version ${item.version})` : ""}:</p>${quote(item.text)}
+    const subject = clientSubject(client?.name, v.isTeam ? null : target.reviewerName, item.scheduledAt);
+    // v0.18.2: one key per post version; posts sent one by one within 10 minutes are grouped.
+    await burstSend(orgId, item.clientId, "REVIEW_ONE", target.reviewerEmail, {
+      subject,
+      subjectMany: subject,
+      intro: `<p>${hi}</p>`,
+      html: `<p>A new post is ready for your review${item.version > 1 ? ` (version ${item.version})` : ""}:</p>${quote(item.text)}
        <p>You can comment, ask for changes, or approve it — nothing is published before you approve.</p>`,
-      { href: reviewUrl(token), label: "Review the post" },
-      "REVIEW_ONE",
-      v.isTeam ? "internal" : "client",
-    );
+      cta: { href: reviewUrl(token), label: "Review the post" },
+      audience: v.isTeam ? "internal" : "client",
+    }, [item.id, item.version]);
   }
   return null;
 }
@@ -107,7 +111,11 @@ export async function submitBatch(
         { href: reviewUrl(token), label: "Review the content" },
         "REVIEW_BATCH",
         v.isTeam ? "internal" : "client",
+        // v0.18.2: the same batch (same posts, same versions) is delivered once a day.
+        { idempotencyKey: mailIdempotencyKey(PUBLISH_MAILS.REVIEW_BATCH.no, Date.now(), [orgId, clientId, target.reviewerEmail, sortedIds(items.filter((i) => sent.includes(i.id)).map((i) => `${i.id}@${i.version}`))]) },
       );
+      // PUB-101s that follow within 10 minutes are grouped (same client inbox).
+      if (emailed) await markSent(orgId, "REVIEW_BATCH", clientId);
     }
   }
   return { sent, skipped, batch, emailed };
@@ -149,7 +157,8 @@ export async function clientAction(
     // v4.55.0 — the comment becomes a new version of the post.
     const r = await reviseNow(orgId, item.id, text, who);
     if (out) out.revised = r;
-    await alertTeam(orgId, `${label} commented on a post`, `<p><b>${esc(who)}</b> (${esc(label)}) wrote:</p>${quote(text)}${revisedHtml(r, item.text)}`, "CLIENT_COMMENTED", { href: publishLink("/publishing", { client: clientId, item: item.id }), label: "Open the post in Publish" });
+    await alertTeam(orgId, `${label} commented on a post`, `<p><b>${esc(who)}</b> (${esc(label)}) wrote:</p>${quote(text)}${revisedHtml(r, item.text)}`, "CLIENT_COMMENTED", { href: publishLink("/publishing", { client: clientId, item: item.id }), label: "Open the post in Publish" },
+      { idempotencyKey: (to) => mailIdempotencyKey(PUBLISH_MAILS.CLIENT_COMMENTED.no, Date.now(), [orgId, clientId, to, item.id, item.version, text]) });
     return null;
   }
   if (action === "request_changes") {
@@ -160,7 +169,12 @@ export async function clientAction(
     // v4.55.0 — the requested changes are written straight away as a new version.
     const r = await reviseNow(orgId, item.id, text, who);
     if (out) out.revised = r;
-    await alertTeam(orgId, `${label} asked for changes`, `<p><b>${esc(who)}</b> (${esc(label)}) asked for changes:</p>${quote(text)}${revisedHtml(r, item.text)}`, "CLIENT_CHANGES", { href: publishLink("/publishing", { client: clientId, item: item.id }), label: "Open the post in Publish" });
+    // v0.18.2: one key per (post version, request); requests within 10 minutes are grouped.
+    await alertTeamBurst(orgId, clientId, "CLIENT_CHANGES", `${label} asked for changes`, `${label} asked for changes ({n} requests)`,
+      `<p><b>${esc(who)}</b> (${esc(label)}) asked for changes:</p>${quote(text)}${revisedHtml(r, item.text)}
+       <p><a href="${publishLink("/publishing", { client: clientId, item: item.id })}" style="color:#111">Open this post in Publish</a></p>`,
+      { href: publishLink("/publishing", { client: clientId, item: item.id }), label: "Open the post in Publish" },
+      [item.id, item.version, text]);
     return null;
   }
   if (action === "approve") {

@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return NextResponse.json({ success: false, error: "Already published — pictures can't change now." }, { status: 409 });
     }
     const b = (await req.json().catch(() => null)) as
-      | { dataB64?: string; mime?: string; name?: string; width?: number; height?: number; replace?: boolean }
+      | { dataB64?: string; mime?: string; name?: string; width?: number; height?: number; replace?: boolean; added?: boolean }
       | null;
     const mime = (b?.mime || "").toLowerCase();
     const data = (b?.dataB64 || "").replace(/^data:[^,]+,/, "");
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       select: MEDIA_SELECT,
     });
     if (["IN_REVIEW", "APPROVED", "SCHEDULED", "FAILED"].includes(item.status)) {
-      await markChanged(c.orgId, item.id, c.name, b?.replace ? "Picture replaced" : "Picture added");
+      await markChanged(c.orgId, item.id, c.name, b?.replace && !b?.added ? "Picture replaced" : "Picture added");
     }
     return NextResponse.json({ success: true, data: { ...m, url: mediaUrl(m) } });
   } catch (e) {

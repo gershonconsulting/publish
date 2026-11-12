@@ -1,5 +1,14 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-10 (v0.18.0)
+Last updated: 2026-11-11 (v0.18.2 PR)
+
+## v0.18.2 — no more email floods (branch nightly/2026-11-11-publish-dedupe)
+Resend 2026-11-10: [PUB-202] x5, [PUB-204] x4, client [PUB-102] x2 + [PUB-101] x3, [PUB-214] x3 within minutes — each one a
+different post/comment/section (one email per click), not the same email twice.
+- ✅ Resend Idempotency-Key per (email no., New York day, event) on PUB-101/102/202/203/204/214 (lib/mail-dedupe.ts)
+- ✅ 10-min burst window per (email, company): first email at once, later ones held (org_settings mailq:*, no migration)
+  and sent as ONE by the next sweep() (lib/mail-burst.ts). PUB-101 + PUB-102 share the client's window.
+- ✅ tsc clean, tests 77/77 (tests/mail-dedupe.test.mts 9/9, replays the 11-10 timeline: 5→2, 4→2, 5→3)
+- ❌ Merge + deploy after Olivier's OK (version 0.18.2 sits above open PR #22's 0.18.1)
 
 ## v0.18.0 — Brand identity in the Knowledge Base (branch feat/v0.18.0-brand-kb)
 Olivier 2026-11-10 (a client's remark): colour codes and related branding belong in Knowledge,

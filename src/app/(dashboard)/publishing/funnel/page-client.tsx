@@ -114,7 +114,7 @@ function TabBtn({ on, onClick, children }: { on: boolean; onClick: () => void; c
 /** The figure a month is judged on: what is planned for next month, what went live otherwise. */
 const judged = (f: Funnel, t: MonthTarget) => (t.future ? f.scheduled : f.published);
 
-/* ── Tab 1: output vs target ───────────────────────────────────────────────── */
+/* ── Tab 1: output vs target ──────────────────────────────────────── */
 function TargetTab({ d }: { d: FunnelData }) {
   const { lastM, thisM, nextM } = d.focus;
   const months = [lastM, thisM, nextM];
@@ -197,7 +197,7 @@ function Bar({ label, color, val, target }: { label: string; color: string; val:
   );
 }
 
-/* ── Tab 2: by company, last vs this month ───────────────────────────────────────────────── */
+/* ── Tab 2: by company, last vs this month ───────────────────────────────── */
 function ClientsTab({ d }: { d: FunnelData }) {
   const { lastM, thisM } = d.focus;
   return (
@@ -254,7 +254,7 @@ function ClientsTab({ d }: { d: FunnelData }) {
   );
 }
 
-/* ── Tab 3: all months ───────────────────────────────────────────────────────────── */
+/* ── Tab 3: all months ───────────────────────────────────────────────────── */
 function MonthsTab({ d }: { d: FunnelData }) {
   const totals = d.months.map((m) => {
     const f = { created: 0, validated: 0, scheduled: 0, published: 0 };

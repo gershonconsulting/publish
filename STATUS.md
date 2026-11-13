@@ -1,5 +1,15 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-11 (v0.18.2 PR)
+Last updated: 2026-11-13 (v0.18.4 PR)
+
+## v0.18.4 — a burst of PUB-202 validations = ONE email (branch nightly/2026-11-13-publish-pub202-dedupe)
+Resend 2026-11-12 (Amphasys): [PUB-202] x5 at 12:42 (1 post), 13:19 (1), 13:29 (5), 13:39 (5), 13:49 (1) while the
+team validated 13 posts one by one. No post was in two emails; the v0.18.2 window was a rolling rate limit.
+- ✅ Held group flushed only once the burst is quiet: no new event for 10 min, capped at 60 min (mail-dedupe burstQuiet/groupDue)
+- ✅ A lone PUB-202 validation is held even when it is the first (holdOnArrival); batches and POST /api/publishing/notify-ready go at once
+- ✅ A flush whose posts were deleted drops its held rows instead of retrying forever
+- ✅ tsc clean, tests 81/81 (tests/mail-dedupe.test.mts 13/13: 5 validations → 1 email; 11-12 replay 5 → 2)
+- ❌ Merge + deploy after Olivier's OK (after PR #25 / v0.18.3)
+
 
 ## v0.18.2 — no more email floods (branch nightly/2026-11-11-publish-dedupe)
 Resend 2026-11-10: [PUB-202] x5, [PUB-204] x4, client [PUB-102] x2 + [PUB-101] x3, [PUB-214] x3 within minutes — each one a

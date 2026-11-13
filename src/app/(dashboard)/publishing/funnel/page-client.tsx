@@ -114,7 +114,7 @@ function TabBtn({ on, onClick, children }: { on: boolean; onClick: () => void; c
 /** The figure a month is judged on: what is planned for next month, what went live otherwise. */
 const judged = (f: Funnel, t: MonthTarget) => (t.future ? f.scheduled : f.published);
 
-/* ── Tab 1: output vs target ───────────────────────────────────────── */
+/* ── Tab 1: output vs target ───────────────────────────────────────────────── */
 function TargetTab({ d }: { d: FunnelData }) {
   const { lastM, thisM, nextM } = d.focus;
   const months = [lastM, thisM, nextM];

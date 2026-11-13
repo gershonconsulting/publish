@@ -68,7 +68,7 @@ export function SettingsClient() {
   );
 }
 
-/* ── This computer ────────────────────────────────────────────────────── */
+/* ── This computer ──────────────────────────────────────────────────────── */
 
 function ThisComputer({ data, reload }: { data: Computers | null; reload: () => void }) {
   const here = usePublishExtensionInfo();
@@ -159,7 +159,7 @@ function ThisComputer({ data, reload }: { data: Computers | null; reload: () => 
   );
 }
 
-/* ── All computers ────────────────────────────────────────────────────── */
+/* ── All computers ──────────────────────────────────────────────────────── */
 
 function AllComputers({ data, reload }: { data: Computers | null; reload: () => void }) {
   const here = usePublishExtensionInfo();
@@ -231,7 +231,7 @@ function AllComputers({ data, reload }: { data: Computers | null; reload: () => 
   );
 }
 
-/* ── Intelligence ─────────────────────────────────────────────────────── */
+/* ── Intelligence ───────────────────────────────────────────────────────── */
 
 type AI = { provider: string; available: boolean; model: string; models: { id: string }[]; test: { ok: boolean; model: string; error?: string } | null };
 
@@ -266,7 +266,7 @@ function IntelligenceSettings() {
   );
 }
 
-/* ── Other settings ─────────────────────────────────────────────────── */
+/* ── Other settings ────────────────────────────────────────────────────── */
 
 function MoreSettings() {
   const links = [

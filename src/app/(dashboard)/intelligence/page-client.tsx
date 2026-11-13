@@ -65,14 +65,14 @@ export function IntelligenceClient() {
         eyebrow="Publish"
         subtitle="Cloudflare Workers AI reads the dashboard (last 30 days) and tells you what it means, what to do, answers your questions and writes the posts that are missing. It never approves or publishes anything."
         actions={
-          <button onClick={() => void run(true)} disabled={busy} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-[#CC3333] rounded-lg hover:bg-[#A8281F] disabled:opacity-60">
+          <button onClick={() => void run(true)} disabled={busy} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-[#FE1B04] rounded-lg hover:bg-[#d11200] disabled:opacity-60">
             {busy ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Analyse again
           </button>
         }
       />
       <div className="flex flex-wrap gap-1 mb-5 border-b border-gray-200">
         {TABS.map((t) => (
-          <button key={t.key} onClick={() => pick(t.key)} className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium -mb-px border-b-2 ${tab === t.key ? "border-[#CC3333] text-[#A8281F]" : "border-transparent text-gray-600 hover:text-gray-900"}`}>
+          <button key={t.key} onClick={() => pick(t.key)} className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium -mb-px border-b-2 ${tab === t.key ? "border-[#FE1B04] text-[#d11200]" : "border-transparent text-gray-600 hover:text-gray-900"}`}>
             <t.icon size={15} /> {t.label}
           </button>
         ))}
@@ -132,14 +132,14 @@ function SuggestionsTab({ a, busy }: { a: Analysis | null; busy: boolean }) {
       <ol className="space-y-3">
         {a.suggestions.map((s, i) => (
           <li key={i} className="bg-white rounded-xl border border-gray-200 p-4 flex gap-3">
-            <span className={`w-7 h-7 rounded-full text-sm font-bold flex items-center justify-center flex-shrink-0 ${s.priority === "high" ? "bg-[#CC3333] text-white" : s.priority === "medium" ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-600"}`}>{i + 1}</span>
+            <span className={`w-7 h-7 rounded-full text-sm font-bold flex items-center justify-center flex-shrink-0 ${s.priority === "high" ? "bg-[#FE1B04] text-white" : s.priority === "medium" ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-600"}`}>{i + 1}</span>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold text-gray-900">{s.title}</div>
               {s.why && <p className="text-sm text-gray-600 mt-0.5"><b className="font-medium text-gray-700">Why:</b> {s.why}</p>}
               {s.action && <p className="text-sm text-gray-600 mt-0.5"><b className="font-medium text-gray-700">Do:</b> {s.action}</p>}
               <div className="text-[11px] text-gray-400 mt-1">{s.company || "All companies"} · priority {s.priority}</div>
             </div>
-            <Link href={s.href} className="self-center text-sm font-semibold rounded-lg bg-[#CC3333] hover:bg-[#A8281F] text-white px-3 py-1.5 whitespace-nowrap">{s.kind === "fill_gap" || s.kind === "content_idea" ? "Write with AI" : "Open"}</Link>
+            <Link href={s.href} className="self-center text-sm font-semibold rounded-lg bg-[#FE1B04] hover:bg-[#d11200] text-white px-3 py-1.5 whitespace-nowrap">{s.kind === "fill_gap" || s.kind === "content_idea" ? "Write with AI" : "Open"}</Link>
           </li>
         ))}
       </ol>
@@ -179,20 +179,20 @@ function ChatTab({ clientId }: { clientId: string }) {
       <div className="min-h-[260px] max-h-[520px] overflow-y-auto space-y-3 pr-1">
         {msgs.length === 0 && (
           <div className="flex flex-wrap gap-2">
-            {STARTERS.map((s) => <button key={s} onClick={() => void ask(s)} className="text-xs rounded-full border border-gray-300 bg-white px-3 py-1.5 text-gray-700 hover:border-[#CC3333] hover:text-[#A8281F]">{s}</button>)}
+            {STARTERS.map((s) => <button key={s} onClick={() => void ask(s)} className="text-xs rounded-full border border-gray-300 bg-white px-3 py-1.5 text-gray-700 hover:border-[#FE1B04] hover:text-[#d11200]">{s}</button>)}
           </div>
         )}
         {msgs.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-[#CC3333] text-white" : "bg-gray-100 text-gray-900"}`}>{m.content}</div>
+            <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-[#FE1B04] text-white" : "bg-gray-100 text-gray-900"}`}>{m.content}</div>
           </div>
         ))}
         {busy && <div className="text-xs text-gray-500 flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Thinking…</div>}
         <div ref={end} />
       </div>
       <form onSubmit={(e) => { e.preventDefault(); void ask(text); }} className="mt-3 flex gap-2">
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask a question about the dashboard…" className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#CC3333]/30 focus:border-[#CC3333]" />
-        <button type="submit" disabled={busy || !text.trim()} className="inline-flex items-center gap-1.5 rounded-lg bg-[#CC3333] hover:bg-[#A8281F] disabled:opacity-50 text-white px-3.5 py-2 text-sm font-semibold"><Send size={14} /> Ask</button>
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask a question about the dashboard…" className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FE1B04]/30 focus:border-[#FE1B04]" />
+        <button type="submit" disabled={busy || !text.trim()} className="inline-flex items-center gap-1.5 rounded-lg bg-[#FE1B04] hover:bg-[#d11200] disabled:opacity-50 text-white px-3.5 py-2 text-sm font-semibold"><Send size={14} /> Ask</button>
       </form>
     </Card>
   );
@@ -272,7 +272,7 @@ function CreateTab({ clientId, clients, ideas }: { clientId: string; clients: { 
           <>
             <div className="flex flex-wrap gap-1.5 mt-4">
               {g.gaps.slice(0, 40).map((d, i) => (
-                <span key={d} className={`text-xs rounded-md px-2 py-1 border ${i < n ? "border-[#CC3333] bg-[#FDF2F2] text-[#A8281F] font-medium" : "border-gray-200 bg-white text-gray-500"}`}>{fmt(d)}</span>
+                <span key={d} className={`text-xs rounded-md px-2 py-1 border ${i < n ? "border-[#FE1B04] bg-[#fff5f5] text-[#d11200] font-medium" : "border-gray-200 bg-white text-gray-500"}`}>{fmt(d)}</span>
               ))}
             </div>
             <p className="text-[11px] text-gray-400 mt-1.5">Days that already have a draft are skipped. Highlighted = the days that will be written.</p>
@@ -282,7 +282,7 @@ function CreateTab({ clientId, clients, ideas }: { clientId: string; clients: { 
                 {[1, 3, 5, 7, 10, 15, 20].filter((x) => x <= Math.max(1, g.gaps.length)).map((x) => <option key={x} value={x}>{x}</option>)}
               </select>
               <span className="text-sm text-gray-700">days</span>
-              <button onClick={() => void write()} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg bg-[#CC3333] hover:bg-[#A8281F] disabled:opacity-60 text-white px-4 py-2 text-sm font-semibold">
+              <button onClick={() => void write()} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg bg-[#FE1B04] hover:bg-[#d11200] disabled:opacity-60 text-white px-4 py-2 text-sm font-semibold">
                 {busy ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />} {busy ? `Writing… ${done.length}/${Math.min(n, g.gaps.length)}` : "Write drafts with AI"}
               </button>
               {busy && <button onClick={() => { stop.current = true; }} className="text-xs text-gray-600 hover:underline">Stop after this one</button>}
@@ -296,7 +296,7 @@ function CreateTab({ clientId, clients, ideas }: { clientId: string; clients: { 
             {done.map((w) => (
               <li key={w.id} className="py-2 flex items-center justify-between gap-2 text-sm">
                 <span className="truncate"><span className="text-gray-500">{fmt(w.day)}</span> — {w.title || "Draft"}</span>
-                <Link href={withClient("/publishing", pickId)} className="text-xs font-semibold text-[#A8281F] hover:underline whitespace-nowrap">Review →</Link>
+                <Link href={withClient("/publishing", pickId)} className="text-xs font-semibold text-[#d11200] hover:underline whitespace-nowrap">Review →</Link>
               </li>
             ))}
           </ul>

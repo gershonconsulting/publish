@@ -22,7 +22,7 @@ import { ItemPanel } from "@/components/publishing/item-panel";
 type Feed = { items: Item[]; clients: ClientLite[]; live: LiveAll; limits: { x: number; linkedin: number }; canWrite: boolean };
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-const DOT: Record<Delivery["status"], string> = { SCHEDULED: "#f59e0b", POSTING: "#6366f1", POSTED: "#10b981", FAILED: "#dc2626", MISSED: "#b91c1c" };
+const DOT: Record<Delivery["status"], string> = { SCHEDULED: "#f59e0b", POSTING: "#0ea5e9", POSTED: "#10b981", FAILED: "#dc2626", MISSED: "#b91c1c" };
 
 export function PublishingCalendarClient() {
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });

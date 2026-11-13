@@ -168,7 +168,7 @@ function ClientDashboard({ clientId }: { clientId: string }) {
   );
 }
 
-/* ── 0. Where we stand: four plain tiles ────────────────────────────────────────────────────────── */
+/* ── 0. Where we stand: four plain tiles ────────────────────────────────── */
 
 function StandTile({ label, value, sub, tone, href }: { label: string; value: string; sub: string; tone: "ok" | "warn" | "bad" | "off"; href: string }) {
   const ring = tone === "bad" ? "border-red-200 bg-red-50/50" : tone === "warn" ? "border-amber-200 bg-amber-50/50" : "border-gray-200 bg-white";
@@ -229,7 +229,7 @@ function StandTiles({ data, clientId }: { data: Data; clientId: string }) {
   );
 }
 
-/* ── More detail (score, pipeline, trend, tables) ───────────────────────────────────────────────── */
+/* ── More detail (score, pipeline, trend, tables) ─────────────────────────── */
 
 function More({ data, clientId }: { data: Data; clientId: string }) {
   const [open, setOpen] = useState(false);
@@ -254,7 +254,7 @@ function More({ data, clientId }: { data: Data; clientId: string }) {
   );
 }
 
-/* ── 1. Score ──────────────────────────────────────────────────────────────────────────────────────────── */
+/* ── 1. Score ─────────────────────────────────────────────────────────────────────────── */
 
 const TONE_BG = { ok: "bg-emerald-50 text-emerald-800", warn: "bg-amber-50 text-amber-800", bad: "bg-red-50 text-red-800", off: "bg-gray-100 text-gray-600" } as const;
 const PART_HREF: Record<string, string> = { coverage: "#coverage", approvals: "#aging", delivery: "#delivery", connections: "#readiness" };
@@ -289,7 +289,7 @@ function ScoreCard({ s, label, className = "" }: { s: HealthScore; label: string
   );
 }
 
-/* ── 2. Intelligence (Cloudflare Workers AI) ────────────────────────────────────────────── */
+/* ── 2. Intelligence (Cloudflare Workers AI) ──────────────────────────── */
 
 function IntelligenceCard({ win, clientId, className = "" }: { win: WindowKey; clientId: string; className?: string }) {
   const [a, setA] = useState<Analysis | null>(null);
@@ -358,7 +358,7 @@ function IntelligenceCard({ win, clientId, className = "" }: { win: WindowKey; c
   );
 }
 
-/* ── 3. Do this now ────────────────────────────────────────────────────────────────────────────────── */
+/* ── 3. Do this now ───────────────────────────────────────────────────────────────────── */
 
 const SEV = {
   critical: { bar: "bg-red-600", chip: "bg-red-50 text-red-700", word: "Urgent" },
@@ -404,7 +404,7 @@ function DoNow({ actions, companies }: { actions: Action[]; companies: { id: str
   );
 }
 
-/* ── 4a. Content coverage ─────────────────────────────────────────────────────────────────────────────── */
+/* ── 4a. Content coverage ─────────────────────────────────────────────────────────────── */
 
 function CoverageCard({ s, clientId }: { s: Section<RunwayRow[]>; clientId: string }) {
   return (
@@ -452,7 +452,7 @@ function CoverageCard({ s, clientId }: { s: Section<RunwayRow[]>; clientId: stri
   );
 }
 
-/* ── 4b. Pipeline ────────────────────────────────────────────────────────────────────────────────── */
+/* ── 4b. Pipeline ─────────────────────────────────────────────────────────────────────── */
 
 function PipelineCard({ t, a, label }: { t: Section<Throughput>; a: Data["approvals"]; label: string }) {
   return (
@@ -489,7 +489,7 @@ function Mini({ k, v }: { k: string; v: number | null }) {
   );
 }
 
-/* ── 4c. Next 7 days ────────────────────────────────────────────────────────────────────────────── */
+/* ── 4c. Next 7 days ──────────────────────────────────────────────────────────────────── */
 
 function dayKey(iso: string): string {
   return new Date(iso).toLocaleDateString("en-CA", { timeZone: ET });
@@ -531,7 +531,7 @@ function WeekCard({ s, clientId }: { s: Section<UpcomingRow[]>; clientId: string
   );
 }
 
-/* ── 4d. Delivery ────────────────────────────────────────────────────────────────────────────────── */
+/* ── 4d. Delivery ─────────────────────────────────────────────────────────────────────── */
 
 function DeliveryCard({ s, label }: { s: Section<{ networks: NetHealth[]; failures: Failure[] }>; label: string }) {
   return (
@@ -585,7 +585,7 @@ function DeliveryCard({ s, label }: { s: Section<{ networks: NetHealth[]; failur
   );
 }
 
-/* ── 4e. Approval aging ────────────────────────────────────────────────────────────────────────── */
+/* ── 4e. Approval aging ───────────────────────────────────────────────────────────────── */
 
 function AgingCard({ s, clientId }: { s: Data["approvals"]; clientId: string }) {
   return (
@@ -627,7 +627,7 @@ function AgingCard({ s, clientId }: { s: Data["approvals"]; clientId: string }) 
   );
 }
 
-/* ── 4f. 14-day trend ──────────────────────────────────────────────────────────────────────────────── */
+/* ── 4f. 14-day trend ─────────────────────────────────────────────────────────────────── */
 
 function TrendCard({ s }: { s: Section<TrendPoint[]> }) {
   return (
@@ -657,7 +657,7 @@ function TrendCard({ s }: { s: Section<TrendPoint[]> }) {
   );
 }
 
-/* ── 5. Readiness: companies + computers ─────────────────────────────────────────────────────────────── */
+/* ── 5. Readiness: companies + computers ───────────────────────────────────────────────── */
 
 function ReadinessCard({ conns, browsers }: { conns: Section<ConnRow[]>; browsers: Section<BrowserView[]> }) {
   return (
@@ -732,7 +732,7 @@ function ReadinessCard({ conns, browsers }: { conns: Section<ConnRow[]>; browser
   );
 }
 
-/* ── 6. Details (the v0.6.0 tables) ───────────────────────────────────────────────────────────────────── */
+/* ── 6. Details (the v0.6.0 tables) ───────────────────────────────────────────────────── */
 
 function Details({ data, clientId }: { data: Data; clientId: string }) {
   return (

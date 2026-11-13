@@ -21,7 +21,7 @@ import { withClient } from "@/components/publish/ui";
 import { frameTone, FRAME_STYLE, pctLabel } from "@/lib/frame-tone";
 import type { CompanyFunnel, Funnel, FunnelData, MonthTarget } from "@/lib/publish-funnel";
 
-const COL = { created: "#6366f1", validated: "#0ea5e9", scheduled: "#f59e0b", published: "#10b981" } as const;
+const COL = { created: "#64748b", validated: "#0ea5e9", scheduled: "#f59e0b", published: "#10b981" } as const;
 const STAGES: { k: keyof Funnel; label: string }[] = [
   { k: "created", label: "Created" },
   { k: "validated", label: "Validated" },
@@ -114,7 +114,7 @@ function TabBtn({ on, onClick, children }: { on: boolean; onClick: () => void; c
 /** The figure a month is judged on: what is planned for next month, what went live otherwise. */
 const judged = (f: Funnel, t: MonthTarget) => (t.future ? f.scheduled : f.published);
 
-/* ── Tab 1: output vs target ─────────────────────────────────────────────── */
+/* ── Tab 1: output vs target ───────────────────────────────────────────────── */
 function TargetTab({ d }: { d: FunnelData }) {
   const { lastM, thisM, nextM } = d.focus;
   const months = [lastM, thisM, nextM];
@@ -147,7 +147,7 @@ function CompanyTitle({ c }: { c: CompanyFunnel }) {
     <div className="flex items-center gap-2 mb-2.5">
       <span className="text-sm font-extrabold text-gray-900">{c.name}</span>
       <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">{c.perWeek}/week</span>
-      {c.clientType === "INTERNAL" && <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 rounded-full px-2 py-0.5">Internal</span>}
+      {c.clientType === "INTERNAL" && <span className="text-[11px] font-semibold text-red-700 bg-red-50 rounded-full px-2 py-0.5">Internal</span>}
       <Link href={withClient("/publishing", c.clientId)} className="ml-auto text-xs font-medium text-red-700 hover:underline">Content</Link>
       <Link href={withClient("/publishing/calendar", c.clientId)} className="text-xs font-medium text-red-700 hover:underline">Calendar</Link>
     </div>
@@ -197,7 +197,7 @@ function Bar({ label, color, val, target }: { label: string; color: string; val:
   );
 }
 
-/* ── Tab 2: by company, last vs this month ───────────────────────────────── */
+/* ── Tab 2: by company, last vs this month ───────────────────────────────────────────────── */
 function ClientsTab({ d }: { d: FunnelData }) {
   const { lastM, thisM } = d.focus;
   return (
@@ -254,7 +254,7 @@ function ClientsTab({ d }: { d: FunnelData }) {
   );
 }
 
-/* ── Tab 3: all months ───────────────────────────────────────────────────── */
+/* ── Tab 3: all months ───────────────────────────────────────────────────────────── */
 function MonthsTab({ d }: { d: FunnelData }) {
   const totals = d.months.map((m) => {
     const f = { created: 0, validated: 0, scheduled: 0, published: 0 };
@@ -325,10 +325,10 @@ function MonthsTab({ d }: { d: FunnelData }) {
           {!abTotal ? <p className="text-sm text-gray-400">No approvals yet.</p> : (
             <>
               <div className="flex h-4 rounded overflow-hidden mb-3">
-                {([["Client", ab.client, "#10b981"], ["Team", ab.team, "#6366f1"], ["Autopilot", ab.autopilot, "#f59e0b"]] as const).map(([l, v, c]) =>
+                {([["Client", ab.client, "#10b981"], ["Team", ab.team, "#FE1B04"], ["Autopilot", ab.autopilot, "#f59e0b"]] as const).map(([l, v, c]) =>
                   v ? <div key={l} title={`${l}: ${v}`} style={{ width: `${(v / abTotal) * 100}%`, background: c }} /> : null)}
               </div>
-              {([["Client (review page)", ab.client, "#10b981"], ["Gershon team", ab.team, "#6366f1"], ["Autopilot", ab.autopilot, "#f59e0b"]] as const).map(([l, v, c]) => (
+              {([["Client (review page)", ab.client, "#10b981"], ["Gershon team", ab.team, "#FE1B04"], ["Autopilot", ab.autopilot, "#f59e0b"]] as const).map(([l, v, c]) => (
                 <div key={l} className="flex items-center justify-between text-xs mb-1.5">
                   <span className="inline-flex items-center gap-1.5 text-gray-700"><span className="w-2.5 h-2.5 rounded-full" style={{ background: c }} />{l}</span>
                   <span className="tabular-nums text-gray-900 font-semibold">{v} <span className="text-gray-400 font-normal">· {Math.round((v / abTotal) * 100)}%</span></span>

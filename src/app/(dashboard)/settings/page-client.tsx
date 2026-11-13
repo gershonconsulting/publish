@@ -266,7 +266,7 @@ function IntelligenceSettings() {
   );
 }
 
-/* ── Other settings ────────────────────────────────────────────────────── */
+/* ── Other settings ─────────────────────────────────────────────────────── */
 
 function MoreSettings() {
   const links = [

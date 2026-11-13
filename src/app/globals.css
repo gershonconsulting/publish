@@ -94,15 +94,11 @@
 }
 
 /* v0.18.1 — brand red is #FE1B04 (hover #d11200, tint #fff5f5), Olivier 2026-11-10.
-   Older pages hard-code earlier reds (#CC3333 / #A8281F / #FDF2F2 / #D92D20 / #B42318)
+   Older pages hard-code earlier reds (#D92D20 / #B42318)
    as arbitrary Tailwind values or SVG attributes. Map them onto the brand red so
    every page matches without touching each file. */
-.bg-\[\#CC3333\], .bg-\[\#D92D20\] { background-color: #FE1B04 !important; }
-.hover\:bg-\[\#A8281F\]:hover, .hover\:bg-\[\#B42318\]:hover { background-color: #d11200 !important; }
-.text-\[\#A8281F\], .hover\:text-\[\#A8281F\]:hover { color: #d11200 !important; }
-.border-\[\#CC3333\], .hover\:border-\[\#CC3333\]:hover { border-color: #FE1B04 !important; }
-.from-\[\#FDF2F2\] { --tw-gradient-from: #fff5f5 var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(255 245 245 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
-.bg-\[\#FDF2F2\] { background-color: #fff5f5 !important; }
+.bg-\[\#D92D20\] { background-color: #FE1B04 !important; }
+.hover\:bg-\[\#B42318\]:hover { background-color: #d11200 !important; }
 .border-\[\#F3D3D3\] { border-color: #ffd6d1 !important; }
 .shadow-\[inset_2px_0_0_\#D92D20\] { box-shadow: inset 2px 0 0 #FE1B04 !important; }
 [stroke="#D92D20"] { stroke: #FE1B04; }

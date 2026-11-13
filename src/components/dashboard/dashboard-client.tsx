@@ -421,7 +421,7 @@ export function DashboardClient({
                 )}
                 <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                   <span className="flex items-center gap-1">
-                    <Activity size={12} className="text-indigo-500" />
+                    <Activity size={12} className="text-red-600" />
                     <span className="font-medium text-gray-700">{wb.posts} posts · {windowLabel}</span>
                     {pb && <span className="text-gray-400">· {pb.posts} in {monthLabelOf(prevKey)}</span>}
                   </span>

@@ -9,7 +9,7 @@
 import Link from "next/link";
 
 export const C = {
-  brand: "#CC3333",
+  brand: "#FE1B04",
   ok: "#16A34A",
   okSoft: "#86EFAC",
   warn: "#F59E0B",
@@ -55,7 +55,7 @@ export function Meter({ value, tone }: { value: number | null; tone: keyof typeo
   );
 }
 
-/* ── Donut ──────────────────────────────────────────────────────────────── */
+/* ── Donut ───────────────────────────────────────────────────────────────── */
 
 export function Donut({ parts, center, sub, size = 150 }: { parts: { label: string; value: number; color: string }[]; center: string; sub?: string; size?: number }) {
   const total = parts.reduce((a, p) => a + p.value, 0);
@@ -188,7 +188,7 @@ export function Lines({ labels, series, height = 150, ariaLabel }: { labels: str
   );
 }
 
-/* ── Funnel (content pipeline) ──────────────────────────────────────────── */
+/* ── Funnel (content pipeline) ──────────────────────────────────────── */
 
 export function Funnel({ steps }: { steps: { label: string; value: number; color: string; hint: string }[] }) {
   const max = Math.max(1, ...steps.map((s) => s.value));

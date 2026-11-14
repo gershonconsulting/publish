@@ -95,6 +95,9 @@ export async function GET(req: NextRequest) {
   }
 }
 
+/** A second identical create within this window returns the first post (v0.18.3). */
+const DEDUPE_MS = 10 * 60 * 1000;
+
 export async function POST(req: NextRequest) {
   const c = await publishingCaller(true);
   if (c instanceof NextResponse) return c;
@@ -114,6 +117,21 @@ export async function POST(req: NextRequest) {
     if (problems.length && (b?.submit || b?.approve)) {
       return NextResponse.json({ success: false, error: problems.join(" ") }, { status: 400 });
     }
+
+    // v0.18.3: idempotent. When Cloudflare answers a page with HTML the page
+    // retries; if the first try did go through, give back that post instead of
+    // making a second one (same company, same person, same text, < 10 min).
+    const dup = await prisma.contentItem.findFirst({
+      where: {
+        organizationId: c.orgId,
+        clientId,
+        createdBy: c.name,
+        text,
+        createdAt: { gte: new Date(Date.now() - DEDUPE_MS) },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (dup) return NextResponse.json({ success: true, data: dup, deduped: true });
 
     const item = await prisma.contentItem.create({
       data: {

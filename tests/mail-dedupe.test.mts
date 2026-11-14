@@ -85,34 +85,35 @@ test("parseHeld rejects junk", () => {
 function replay(sends: { t: number; mail: mm.BurstMail; id: string; batch?: boolean }[], sweepEvery = 60_000) {
   const last = new Map<string, number>();
   let held: mm.HeldEvent[] = [];
-  const out: { t: number; mail: string; n: number }[] = [];
+  const out: { t: number; mail: string; n: number; ids?: string[] }[] = [];
   const flush = (now: number) => {
     for (const g of m.groupHeld(held)) {
-      if (!m.flushDue(last.get(m.lastSentKey(g[0].mail, g[0].clientId)) ?? null, now)) continue;
-      out.push({ t: now, mail: m.combineHeld(g).mail, n: g.length });
+      if (!m.groupDue(g, last.get(m.lastSentKey(g[0].mail, g[0].clientId)) ?? null, now)) continue;
+      out.push({ t: now, mail: m.combineHeld(g).mail, n: g.length, ids: g.map((e) => e.id) });
       last.set(m.lastSentKey(g[0].mail, g[0].clientId), now);
       held = held.filter((e) => !g.includes(e));
     }
   };
-  const start = sends[0].t, end = sends[sends.length - 1].t + 3 * m.BURST_WINDOW_MS;
+  const start = sends[0].t, end = sends[sends.length - 1].t + m.MAX_HOLD_MS + 3 * m.BURST_WINDOW_MS;
   let i = 0;
   for (let now = start; now <= end; now += 1000) {
     while (i < sends.length && sends[i].t <= now) {
       const s = sends[i++];
       const k = m.lastSentKey(s.mail, "altavia");
-      if (!s.batch && m.burstHeld(last.get(k) ?? null, now)) held.push(ev(s.id, now, s.mail));
-      else { out.push({ t: now, mail: s.batch ? "REVIEW_BATCH" : s.mail, n: 1 }); last.set(k, now); }
+      if (!s.batch && m.holdOnArrival(s.mail, 1, last.get(k) ?? null, now)) held.push(ev(s.id, now, s.mail));
+      else { out.push({ t: now, mail: s.batch ? "REVIEW_BATCH" : s.mail, n: 1, ids: [s.id] }); last.set(k, now); }
     }
     if ((now - start) % sweepEvery === 0) flush(now);
   }
   return out;
 }
 
-test("2026-11-10 replay: PUB-202 x5 → 2 emails, PUB-204 x4 → 2, client PUB-102 x2 + PUB-101 x3 → 3", () => {
+test("2026-11-10 replay: PUB-202 x5 → 1 email (v0.18.4), PUB-204 x4 → 2, client PUB-102 x2 + PUB-101 x3 → 3", () => {
   const p202 = replay(["19:51:45", "19:52:45", "19:52:50", "19:52:56", "19:52:58"].map((h, i) => ({ t: at(h), mail: "READY_FOR_PUBLISHING" as const, id: `p${i}` })));
-  assert.equal(p202.length, 2);
-  assert.equal(p202[1].n, 4, "the four later approvals arrive together");
-  assert.ok(p202[1].t - at("19:51:45") <= m.BURST_WINDOW_MS + 60_000, "held at most window + one sweep");
+  assert.equal(p202.length, 1, "5 validations in a burst → ONE PUB-202");
+  assert.equal(p202[0].n, 5);
+  assert.equal(p202[0].mail, "READY_FOR_PUBLISHING");
+  assert.ok(p202[0].t - at("19:52:58") <= m.QUIET_MS + 60_000, "sent within quiet period + one sweep of the last validation");
 
   const p204 = replay(["19:50:23", "19:51:05", "19:51:39", "19:52:35"].map((h, i) => ({ t: at(h), mail: "CLIENT_CHANGES" as const, id: `c${i}` })));
   assert.equal(p204.length, 2);
@@ -132,4 +133,53 @@ test("2026-11-10 replay: PUB-202 x5 → 2 emails, PUB-204 x4 → 2, client PUB-1
 test("a lone event is never delayed", () => {
   const r = replay([{ t: at("15:00:00"), mail: "KB_VALIDATION", id: "k" }]);
   assert.deepEqual(r.map((x) => x.t), [at("15:00:00")]);
+});
+
+// v0.18.4 — Resend 2026-11-12 (Amphasys): 13 posts validated one by one by the team between
+// 12:42 and ~13:45Z gave 5 PUB-202 (12:42 1, 13:19 1, 13:29 5, 13:39 5, 13:49 1): the window
+// was rolling (flush every 10 min while approvals kept coming). Approval times are
+// reconstructed from those sends (each email = posts approved since the previous one).
+const amphasys = [
+  "12:42:50",
+  "13:19:15",
+  "13:20:10", "13:22:30", "13:24:40", "13:26:50", "13:28:55",
+  "13:30:40", "13:32:50", "13:34:30", "13:36:45", "13:38:50",
+  "13:41:00",
+];
+
+test("2026-11-12 Amphasys replay: 13 one-by-one validations → 2 PUB-202, every post listed exactly once", () => {
+  const r = replay(amphasys.map((h, i) => ({ t: Date.parse(`2026-11-12T${h}Z`), mail: "READY_FOR_PUBLISHING" as const, id: `a${i}` })));
+  assert.equal(r.length, 2, "the 12:42 one alone, then the 13:19-13:41 session as one email (was 5)");
+  assert.deepEqual(r.map((x) => x.n), [1, 12]);
+  const ids = r.flatMap((x) => x.ids || []);
+  assert.equal(ids.length, 13);
+  assert.equal(new Set(ids).size, 13, "no post in two emails");
+});
+
+test("5 validations in a burst → exactly 1 PUB-202, whatever the sweep cadence", () => {
+  const base = Date.parse("2026-11-13T15:00:00Z");
+  for (const sweepEvery of [60_000, 5 * 60_000, 15 * 60_000]) {
+    const r = replay([0, 20, 45, 70, 110].map((s, i) => ({ t: base + s * 1000, mail: "READY_FOR_PUBLISHING" as const, id: `v${i}` })), sweepEvery);
+    assert.equal(r.length, 1, `sweep every ${sweepEvery / 60000} min`);
+    assert.equal(r[0].n, 5);
+  }
+});
+
+test("burstQuiet: waits for 10 min without a new event, never longer than an hour", () => {
+  const t0 = Date.parse("2026-11-12T13:19:15Z");
+  const g = [{ at: t0 }, { at: t0 + 9 * 60_000 }];
+  assert.equal(m.burstQuiet(g, t0 + 10 * 60_000), false, "a new one came 1 min ago");
+  assert.equal(m.burstQuiet(g, t0 + 19 * 60_000), true);
+  const steady = Array.from({ length: 30 }, (_, i) => ({ at: t0 + i * 2 * 60_000 }));
+  assert.equal(m.burstQuiet(steady, t0 + 59 * 60_000), false);
+  assert.equal(m.burstQuiet(steady, t0 + m.MAX_HOLD_MS), true, "a never-ending session still gets an email each hour");
+  assert.equal(m.groupDue(g, t0 + 15 * 60_000, t0 + 19 * 60_000), false, "still inside the window of the last email");
+});
+
+test("holdOnArrival: a lone PUB-202 is held even first; batches and other emails go at once", () => {
+  const now = Date.parse("2026-11-13T15:00:00Z");
+  assert.equal(m.holdOnArrival("READY_FOR_PUBLISHING", 1, null, now), true);
+  assert.equal(m.holdOnArrival("READY_FOR_PUBLISHING", 6, null, now), false, "“Approve all” = one email, sent now");
+  assert.equal(m.holdOnArrival("READY_FOR_PUBLISHING", 6, now - 60_000, now), true);
+  assert.equal(m.holdOnArrival("CLIENT_CHANGES", 1, null, now), false);
 });

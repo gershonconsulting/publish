@@ -7,6 +7,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { callApi } from "@/lib/api-call";
 import { CheckCircle2, WifiOff, XCircle } from "lucide-react";
 
 export type Net = "LINKEDIN" | "TWITTER";
@@ -175,17 +176,12 @@ export function LiveStrip({ live, chromes }: { live: LiveAll | null; chromes?: {
 }
 
 export async function act(id: string, action: string, extra: Record<string, unknown> = {}): Promise<string | null> {
-  try {
-    const r = await fetch(`/api/publishing/content/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, ...extra }),
-    });
-    const j = await r.json();
-    return j?.success ? null : j?.error || "Failed";
-  } catch {
-    return "Network error";
-  }
+  const j = await callApi(`/api/publishing/content/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...extra }),
+  });
+  return j.success ? null : (j.error as string) || "Failed";
 }
 
 export const EVENT_LABEL: Record<string, string> = {
@@ -256,17 +252,14 @@ export async function prepareImage(file: File): Promise<Prepared> {
 }
 
 export async function uploadImage(contentId: string, p: Prepared, replace = false): Promise<string | null> {
-  try {
-    const r = await fetch(`/api/publishing/content/${contentId}/media`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dataB64: p.dataB64, mime: p.mime, name: p.name, width: p.width, height: p.height, replace }),
-    });
-    const j = await r.json();
-    return j?.success ? null : j?.error || "Upload failed.";
-  } catch {
-    return "Upload failed.";
-  }
+  const j = await callApi(`/api/publishing/content/${contentId}/media`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    // One picture per post, so a retry may always replace (a first try that went
+    // through before Cloudflare's error page must not block the second one).
+    body: JSON.stringify({ dataB64: p.dataB64, mime: p.mime, name: p.name, width: p.width, height: p.height, replace: true, added: !replace }),
+  });
+  return j.success ? null : (j.error as string) || "Upload failed.";
 }
 
 /** Picks the post's picture by click or drag-and-drop (one per post; picking again replaces it). */

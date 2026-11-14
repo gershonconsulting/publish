@@ -12,7 +12,7 @@
  */
 import prisma from "@/lib/db-raw";
 import {
-  BURST_WINDOW_MS, HELD_PREFIX, burstHeld, combineHeld, flushDue, groupHeld, heldKey, lastSentKey, mailIdempotencyKey, parseHeld, type HeldEvent,
+  BURST_WINDOW_MS, HELD_PREFIX, burstHeld, combineHeld, groupDue, groupHeld, heldKey, holdOnArrival, lastSentKey, mailIdempotencyKey, parseHeld, type HeldEvent,
 } from "@/lib/mail-dedupe";
 import { PUBLISH_MAILS, type PubMail } from "@/lib/publishing-mail";
 
@@ -42,6 +42,12 @@ export async function shouldHold(orgId: string, mail: string, clientId: string |
   return burstHeld(await lastSentAt(orgId, mail, clientId), now, BURST_WINDOW_MS);
 }
 
+/** v0.18.4: like shouldHold, but a lone PUB-202 validation is held even when it is the first. */
+export async function shouldHoldOnArrival(orgId: string, mail: string, postCount: number, clientId: string | null | undefined, now = Date.now()): Promise<boolean> {
+  if (!clientId) return false;
+  return holdOnArrival(mail, postCount, await lastSentAt(orgId, mail, clientId), now);
+}
+
 /** Store a held email. Returns false when it could not be stored (the caller then sends it now). */
 export async function hold(orgId: string, ev: HeldEvent): Promise<boolean> {
   try {
@@ -69,7 +75,8 @@ export async function flushHeld(orgId: string, send: Sender, sendReady: ReadySen
   let sent = 0;
   for (const group of groupHeld(events)) {
     const first = group[0];
-    if (!flushDue(await lastSentAt(orgId, first.mail, first.clientId), now)) continue;
+    // v0.18.4: wait until the burst is over (no new event for 10 min), not just 10 min since the last email.
+    if (!groupDue(group, await lastSentAt(orgId, first.mail, first.clientId), now)) continue;
     let ok: boolean;
     if (first.mail === "READY_FOR_PUBLISHING") {
       const ids = Array.from(new Set(group.flatMap((e) => e.itemIds || [])));

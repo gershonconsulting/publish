@@ -6,6 +6,7 @@
  * per-network publishing results. Used by the board and the calendar.
  */
 
+import { callApi } from "@/lib/api-call";
 import { useCallback, useEffect, useState } from "react";
 import { CalendarDays, Check, Copy, ExternalLink, Loader2, MessageSquare, RotateCcw, Send, Trash2, Undo2, X } from "lucide-react";
 import {
@@ -40,12 +41,12 @@ export function ItemPanel({
   const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
-    const r = await fetch(`/api/publishing/content/${id}`, { cache: "no-store" });
-    const j = await r.json();
-    if (!j?.success) { setErr(j?.error || "Could not load."); return; }
-    const it: Item = j.data.item;
+    const j = await callApi(`/api/publishing/content/${id}`, { cache: "no-store" });
+    if (!j.success) { setErr((j.error as string) || "Could not load."); return; }
+    const d = j.data as { item: Item; reviewUrl: string };
+    const it: Item = d.item;
     setItem(it);
-    setReviewUrl(j.data.reviewUrl);
+    setReviewUrl(d.reviewUrl);
     setText(it.text);
     setTextX(it.textX || "");
     setTitle(it.title || "");
@@ -87,9 +88,8 @@ export function ItemPanel({
   async function pictureAction(mediaId: string, method: "DELETE" | "PATCH") {
     if (method === "DELETE" && !confirm("Remove this picture?")) return;
     setBusy(true);
-    const r = await fetch(`/api/publishing/content/${id}/media/${mediaId}`, { method });
-    const j = await r.json().catch(() => null);
-    if (!j?.success) setErr(j?.error || "Could not change the picture.");
+    const j = await callApi(`/api/publishing/content/${id}/media/${mediaId}`, { method });
+    if (!j.success) setErr((j.error as string) || "Could not change the picture.");
     await load();
     onChanged();
     setBusy(false);

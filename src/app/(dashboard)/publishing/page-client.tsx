@@ -12,6 +12,7 @@
  * v0.13.0: one company at a time — with none picked, a card per company.
  */
 
+import { callApi } from "@/lib/api-call";
 import { useSelectedClient } from "@/lib/selected-client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Header } from "@/components/layout/header";
@@ -202,14 +203,15 @@ function Composer({
     try {
       // Saved as a draft first, pictures attached, then sent / approved — so
       // the server checks the post with its pictures.
-      const r = await fetch("/api/publishing/content", {
+      // v0.18.3: callApi retries once on a Cloudflare HTML page; the route is
+      // idempotent, so the retry returns the same post instead of a duplicate.
+      const j = await callApi("/api/publishing/content", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clientId: clientId || null, title, text, textX, platforms }),
       });
-      const j = await r.json();
-      if (!j?.success) throw new Error(j?.error || "Could not save.");
-      id = j.data.id as string;
+      if (!j.success) throw new Error((j.error as string) || "Could not save.");
+      id = (j.data as { id: string }).id;
       for (const p of pics) {
         const e = await uploadImage(id, p);
         if (e) throw new Error(`Saved as a draft, but a picture failed: ${e}`);

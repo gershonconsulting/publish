@@ -148,7 +148,7 @@ export function PortfolioDashboard() {
                         <button onClick={() => cid && open(cid)} className="text-sm font-semibold text-gray-900 hover:underline whitespace-nowrap">{a.company}</button>
                       )}
                       <span className="text-sm text-gray-700 flex-1 min-w-0">{a.text}</span>
-                      <Link href={a.href} className="text-xs font-semibold text-[#A8281F] hover:underline whitespace-nowrap inline-flex items-center gap-1">Fix <ArrowRight size={12} /></Link>
+                      <Link href={a.href} className="text-xs font-semibold text-[#d11200] hover:underline whitespace-nowrap inline-flex items-center gap-1">Fix <ArrowRight size={12} /></Link>
                     </li>
                   );
                 })}
@@ -276,7 +276,7 @@ function Row({ r, logo, onOpen }: { r: PortfolioRow; logo: string | null; onOpen
       <td className="py-2.5 px-2 whitespace-nowrap space-x-2"><Conn label="in" v={r.linkedin} /><Conn label="X" v={r.x} /></td>
       <td className="py-2.5 px-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
         <button onClick={() => onOpen(r.clientId, "/publishing")} className="text-xs font-medium text-gray-600 hover:underline mr-3">Content</button>
-        <button onClick={() => onOpen(r.clientId)} className="text-xs font-semibold text-[#A8281F] hover:underline inline-flex items-center gap-1">Open <ArrowRight size={12} /></button>
+        <button onClick={() => onOpen(r.clientId)} className="text-xs font-semibold text-[#d11200] hover:underline inline-flex items-center gap-1">Open <ArrowRight size={12} /></button>
       </td>
     </tr>
   );

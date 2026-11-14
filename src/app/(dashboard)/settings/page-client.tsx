@@ -147,7 +147,7 @@ function ThisComputer({ data, reload }: { data: Computers | null; reload: () => 
             <div>
               <div className="text-xs font-semibold text-gray-700">Does this computer publish?</div>
               <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden mt-1">
-                <button onClick={() => setPublishes(true)} className={`px-3 py-1.5 text-xs font-medium ${publishes ? "bg-[#CC3333] text-white" : "bg-white text-gray-700"}`}>Yes — publishing computer</button>
+                <button onClick={() => setPublishes(true)} className={`px-3 py-1.5 text-xs font-medium ${publishes ? "bg-[#FE1B04] text-white" : "bg-white text-gray-700"}`}>Yes — publishing computer</button>
                 <button onClick={() => setPublishes(false)} className={`px-3 py-1.5 text-xs font-medium ${!publishes ? "bg-gray-900 text-white" : "bg-white text-gray-700"}`}>No — viewing only</button>
               </div>
               <p className="text-[11px] text-gray-500 mt-1">{publishes ? "The extension is expected here; you are told when it is missing or old." : "No “not installed” notice on this computer. An old extension, if installed, is still flagged."}</p>
@@ -197,12 +197,12 @@ function AllComputers({ data, reload }: { data: Computers | null; reload: () => 
                         {edit === c.id ? (
                           <div className="flex gap-1.5">
                             <input autoFocus value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void save(c.id); if (e.key === "Escape") setEdit(null); }} maxLength={60} className="rounded border border-gray-300 px-2 py-0.5 text-sm w-48" />
-                            <button onClick={() => void save(c.id)} className="text-xs font-semibold text-[#A8281F]">Save</button>
+                            <button onClick={() => void save(c.id)} className="text-xs font-semibold text-[#d11200]">Save</button>
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5">
                             <span className="text-sm font-semibold text-gray-900 truncate">{c.label}</span>
-                            {here.browserId === c.id && <span className="text-[10px] font-bold uppercase bg-[#CC3333] text-white rounded px-1.5 py-0.5">This computer</span>}
+                            {here.browserId === c.id && <span className="text-[10px] font-bold uppercase bg-[#FE1B04] text-white rounded px-1.5 py-0.5">This computer</span>}
                             {data.canWrite && <button title="Rename" onClick={() => { setEdit(c.id); setVal(c.named ? c.label : ""); }} className="text-gray-400 hover:text-gray-700"><Pencil size={12} /></button>}
                           </div>
                         )}

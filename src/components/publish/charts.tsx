@@ -9,7 +9,7 @@
 import Link from "next/link";
 
 export const C = {
-  brand: "#CC3333",
+  brand: "#FE1B04",
   ok: "#16A34A",
   okSoft: "#86EFAC",
   warn: "#F59E0B",

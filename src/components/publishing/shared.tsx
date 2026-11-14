@@ -80,7 +80,7 @@ export const ITEM_STYLE: Record<ItemStatus, { label: string; cls: string; dot: s
 
 export const DELIVERY_STYLE: Record<Delivery["status"], { label: string; cls: string }> = {
   SCHEDULED: { label: "scheduled", cls: "text-amber-700" },
-  POSTING: { label: "publishing…", cls: "text-indigo-700" },
+  POSTING: { label: "publishing…", cls: "text-sky-700" },
   POSTED: { label: "posted", cls: "text-emerald-700" },
   FAILED: { label: "failed", cls: "text-red-700" },
   MISSED: { label: "missed", cls: "text-red-700" },

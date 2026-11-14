@@ -147,7 +147,7 @@ function ClientDashboard({ clientId }: { clientId: string }) {
             <div className="flex items-center gap-2">
               <div className="inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden">
                 {WINDOWS.map((w) => (
-                  <button key={w.key} onClick={() => pick(w.key)} className={`px-2.5 py-1.5 text-xs font-medium ${win === w.key ? "bg-[#CC3333] text-white" : "text-gray-700 hover:bg-gray-50"}`}>{w.label}</button>
+                  <button key={w.key} onClick={() => pick(w.key)} className={`px-2.5 py-1.5 text-xs font-medium ${win === w.key ? "bg-[#FE1B04] text-white" : "text-gray-700 hover:bg-gray-50"}`}>{w.label}</button>
                 ))}
               </div>
               <button onClick={() => void load()} title="Refresh" className="inline-flex items-center px-2 py-1.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
@@ -313,16 +313,16 @@ function IntelligenceCard({ win, clientId, className = "" }: { win: WindowKey; c
   useEffect(() => { setA(null); void run(false); }, [run]);
 
   return (
-    <section className={`rounded-xl border border-[#F3D3D3] bg-gradient-to-br from-[#FDF2F2] to-white p-5 flex flex-col ${className}`}>
+    <section className={`rounded-xl border border-[#F3D3D3] bg-gradient-to-br from-[#fff5f5] to-white p-5 flex flex-col ${className}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg bg-[#CC3333] text-white flex items-center justify-center"><Sparkles size={15} /></span>
+          <span className="w-7 h-7 rounded-lg bg-[#FE1B04] text-white flex items-center justify-center"><Sparkles size={15} /></span>
           <div>
             <h2 className="text-sm font-semibold text-gray-900">Intelligence</h2>
             <p className="text-[11px] text-gray-500">{a ? (a.source === "ai" ? `AI briefing · Cloudflare Workers AI · ${ago(a.generatedAt)}${a.stale ? " · data changed since" : ""}` : "Rule-based — AI unavailable right now") : "Cloudflare Workers AI"}</p>
           </div>
         </div>
-        <button onClick={() => void run(true)} disabled={busy} title="Ask the AI again with the latest numbers" className="text-xs font-medium text-[#A8281F] hover:underline disabled:opacity-50 inline-flex items-center gap-1">
+        <button onClick={() => void run(true)} disabled={busy} title="Ask the AI again with the latest numbers" className="text-xs font-medium text-[#d11200] hover:underline disabled:opacity-50 inline-flex items-center gap-1">
           {busy ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Refresh
         </button>
       </div>
@@ -337,18 +337,18 @@ function IntelligenceCard({ win, clientId, className = "" }: { win: WindowKey; c
             <ol className="mt-3 space-y-2">
               {a.suggestions.slice(0, 3).map((s, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className={`mt-0.5 w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center flex-shrink-0 ${s.priority === "high" ? "bg-[#CC3333] text-white" : "bg-white border border-gray-300 text-gray-700"}`}>{i + 1}</span>
+                  <span className={`mt-0.5 w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center flex-shrink-0 ${s.priority === "high" ? "bg-[#FE1B04] text-white" : "bg-white border border-gray-300 text-gray-700"}`}>{i + 1}</span>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm text-gray-900 leading-snug">{s.title}</div>
                     {s.why && <div className="text-[11px] text-gray-500">{s.why}</div>}
                   </div>
-                  <Link href={s.href} className="text-xs font-semibold text-[#A8281F] whitespace-nowrap hover:underline">{s.kind === "fill_gap" || s.kind === "content_idea" ? "Write with AI" : "Open"} →</Link>
+                  <Link href={s.href} className="text-xs font-semibold text-[#d11200] whitespace-nowrap hover:underline">{s.kind === "fill_gap" || s.kind === "content_idea" ? "Write with AI" : "Open"} →</Link>
                 </li>
               ))}
             </ol>
           )}
           <div className="mt-auto pt-4 flex flex-wrap gap-2">
-            <Link href={withClient("/intelligence", clientId)} className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg bg-[#CC3333] hover:bg-[#A8281F] text-white px-3 py-1.5"><Sparkles size={13} /> Full analysis</Link>
+            <Link href={withClient("/intelligence", clientId)} className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg bg-[#FE1B04] hover:bg-[#d11200] text-white px-3 py-1.5"><Sparkles size={13} /> Full analysis</Link>
             <Link href={withClient("/intelligence?tab=chat", clientId)} className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg border border-gray-300 bg-white text-gray-800 px-3 py-1.5 hover:bg-gray-50"><MessageSquare size={13} /> Ask a question</Link>
             <Link href={withClient("/intelligence?tab=create", clientId)} className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg border border-gray-300 bg-white text-gray-800 px-3 py-1.5 hover:bg-gray-50"><Wand2 size={13} /> Create content</Link>
           </div>
@@ -388,7 +388,7 @@ function DoNow({ actions, companies }: { actions: Action[]; companies: { id: str
                   <div className="flex flex-wrap gap-3 mt-2">
                     <Link href={a.href} className="text-xs font-semibold text-gray-800 hover:underline inline-flex items-center gap-1">Open <ArrowRight size={12} /></Link>
                     {needsContent && cid && (
-                      <Link href={`/intelligence?tab=create&client=${cid}`} className="text-xs font-semibold text-[#A8281F] hover:underline inline-flex items-center gap-1"><Wand2 size={12} /> Write the missing posts with AI</Link>
+                      <Link href={`/intelligence?tab=create&client=${cid}`} className="text-xs font-semibold text-[#d11200] hover:underline inline-flex items-center gap-1"><Wand2 size={12} /> Write the missing posts with AI</Link>
                     )}
                   </div>
                 </div>
@@ -429,7 +429,7 @@ function CoverageCard({ s, clientId }: { s: Section<RunwayRow[]>; clientId: stri
                   extra: (
                     <span className="inline-flex items-center gap-2">
                       <span className="tabular-nums">{req ? `${ok}/${req}` : "—"}</span>
-                      {req > ok && <Link href={`/intelligence?tab=create&client=${r.clientId}`} title="Write the missing posts with AI" className="text-[#A8281F] font-semibold hover:underline">Fill</Link>}
+                      {req > ok && <Link href={`/intelligence?tab=create&client=${r.clientId}`} title="Write the missing posts with AI" className="text-[#d11200] font-semibold hover:underline">Fill</Link>}
                     </span>
                   ),
                 } as HBarRow;
@@ -570,7 +570,7 @@ function DeliveryCard({ s, label }: { s: Section<{ networks: NetHealth[]; failur
                       {failures.slice(0, 4).map((f) => (
                         <li key={f.id} className="text-xs text-gray-700 flex justify-between gap-2">
                           <span className="truncate"><b className="font-medium">{f.company}</b> · {f.platform === "TWITTER" ? "X" : "LinkedIn"} · {f.error || (f.status === "MISSED" ? "missed" : "failed")}</span>
-                          <Link href={withClient("/publishing/calendar", f.clientId || "")} className="text-[#A8281F] font-semibold whitespace-nowrap hover:underline">Fix</Link>
+                          <Link href={withClient("/publishing/calendar", f.clientId || "")} className="text-[#d11200] font-semibold whitespace-nowrap hover:underline">Fix</Link>
                         </li>
                       ))}
                     </ul>

@@ -23,6 +23,6 @@ export async function POST(req: NextRequest) {
     },
     select: { id: true },
   });
-  const sent = await notifyReadyForPublishing(c.orgId, rows.map((r) => r.id), c.name, "validation notice re-sent");
+  const sent = await notifyReadyForPublishing(c.orgId, rows.map((r) => r.id), c.name, "validation notice re-sent", { immediate: true });
   return NextResponse.json({ success: true, data: { posts: rows.length, sent } });
 }

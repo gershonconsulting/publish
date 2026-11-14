@@ -35,7 +35,7 @@ import type { ClientType } from "@prisma/client";
 import prisma from "@/lib/db-raw";
 import { siteUrl } from "@/lib/site";
 import { withAuditBcc } from "@/lib/mail-bcc";
-import { flushHeld, hold, markSent, shouldHold } from "@/lib/mail-burst";
+import { flushHeld, hold, markSent, shouldHold, shouldHoldOnArrival } from "@/lib/mail-burst";
 import { mailIdempotencyKey, sortedIds, type BurstMail } from "@/lib/mail-dedupe";
 import { PUBLISH_MAILS, PUBLISH_ORIGIN, PUBLISH_REPLY_TO, numberedSubject, publishFrom, publishHtml, publishLink, type MailAudience, type PubMail } from "@/lib/publishing-mail";
 
@@ -881,14 +881,15 @@ export async function orgsWithDeliveries(): Promise<string[]> {
 // social@gershonconsulting.com saying it is ready for publishing. One email
 // per approval action (an "Approve all" or an auto-approval batch = one email).
 
-export async function notifyReadyForPublishing(orgId: string, itemIds: string[], by: string, how: string, opts: { flush?: boolean } = {}): Promise<boolean> {
-  if (!itemIds.length) return false;
+export async function notifyReadyForPublishing(orgId: string, itemIds: string[], by: string, how: string, opts: { flush?: boolean; immediate?: boolean } = {}): Promise<boolean> {
+  // v0.18.4: a flush whose posts are gone has nothing to send → true, so its held rows are dropped.
+  if (!itemIds.length) return !!opts.flush;
   const items = await prisma.contentItem.findMany({
     where: { organizationId: orgId, id: { in: itemIds } },
     select: { id: true, clientId: true, title: true, text: true, scheduledAt: true, platforms: true, version: true },
     orderBy: { scheduledAt: "asc" },
   });
-  if (!items.length) return false;
+  if (!items.length) return !!opts.flush;
   const clientIds = Array.from(new Set(items.map((i) => i.clientId).filter((x): x is string => !!x)));
   const clients = await prisma.client.findMany({ where: { id: { in: clientIds } }, select: { id: true, name: true } });
   const nameOf = (id: string | null) => clients.find((c) => c.id === id)?.name || "—";
@@ -906,9 +907,10 @@ export async function notifyReadyForPublishing(orgId: string, itemIds: string[],
   // v0.18.2: same posts (same versions) → same key → Resend delivers once a day.
   const key = mailIdempotencyKey(PUBLISH_MAILS.READY_FOR_PUBLISHING.no, now, [orgId, to, sortedIds(items.map((i) => `${i.id}@${i.version}`))]);
   const oneClient = clientIds.length === 1 ? clientIds[0] : null;
-  // Approvals clicked one by one: the first email goes now, the next ones within
-  // 10 minutes are held and listed together by the next sweep (flush: true).
-  if (!opts.flush && oneClient && (await shouldHold(orgId, "READY_FOR_PUBLISHING", oneClient, now))) {
+  // Approvals clicked one by one: v0.18.4 every lone validation is held (even the
+  // first) and the next sweep lists them together once nothing new came for 10 min
+  // (flush: true). Batches keep "first one at once". A manual re-send is immediate.
+  if (!opts.flush && !opts.immediate && oneClient && (await shouldHoldOnArrival(orgId, "READY_FOR_PUBLISHING", items.length, oneClient, now))) {
     const held = await hold(orgId, {
       id: key, at: now, mail: "READY_FOR_PUBLISHING", clientId: oneClient, to, audience: "internal",
       subject: "", subjectMany: "", html: "", cta: { href: publishLink("/publishing/calendar", { client: oneClient }), label: "Open the calendar in Publish" },

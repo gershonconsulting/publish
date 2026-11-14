@@ -71,6 +71,41 @@ export function flushDue(lastSentMs: number | null, now: number, windowMs = BURS
   return !burstHeld(lastSentMs, now, windowMs);
 }
 
+/**
+ * v0.18.4 — Resend 2026-11-12, Amphasys: PUB-202 went out 5 times in 67 minutes
+ * (12:42 1 post, 13:19 1, 13:29 5, 13:39 5, 13:49 1) while Olivier validated 13
+ * posts one by one. No post was listed twice: the window above was a ROLLING
+ * rate limit — a held group was flushed as soon as 10 min had passed since the
+ * last email, even while approvals were still coming in, so a long session gave
+ * one email every 10 minutes. Now a held group waits until the burst is over:
+ * nothing new for QUIET_MS (capped at MAX_HOLD_MS after its oldest event).
+ */
+export const QUIET_MS = BURST_WINDOW_MS;
+export const MAX_HOLD_MS = 60 * 60 * 1000;
+
+/** True when no event was added to this held group for quietMs, or its oldest one waited maxMs. */
+export function burstQuiet(group: Array<{ at: number }>, now: number, quietMs = QUIET_MS, maxMs = MAX_HOLD_MS): boolean {
+  if (!group.length) return true;
+  const ats = group.map((e) => (Number.isFinite(e.at) ? e.at : 0));
+  return now - Math.max(...ats) >= quietMs || now - Math.min(...ats) >= maxMs;
+}
+
+/** A held group goes out once the window since the last email is over AND the burst has gone quiet. */
+export function groupDue(group: Array<{ at: number }>, lastSentMs: number | null, now: number): boolean {
+  return flushDue(lastSentMs, now) && burstQuiet(group, now);
+}
+
+/**
+ * v0.18.4 — PUB-202 (internal) for ONE post validated on its own is always held,
+ * even the first: validations come in series, and a few minutes' delay on an
+ * internal notice costs nothing. Batches ("Approve all", Autopilot) and other
+ * emails keep "first one at once".
+ */
+export function holdOnArrival(mail: string, postCount: number, lastSentMs: number | null, now: number): boolean {
+  if (mail === "READY_FOR_PUBLISHING" && postCount === 1) return true;
+  return burstHeld(lastSentMs, now);
+}
+
 /** One held email, stored as JSON in org_settings `mailq:<group>:<clientId>:<eventId>`. */
 export type HeldEvent = {
   id: string;

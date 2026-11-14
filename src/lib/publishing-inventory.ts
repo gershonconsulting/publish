@@ -195,7 +195,7 @@ export async function teamDigest(orgId: string, now = Date.now(), force = false)
   }
 
   const color = { critical: "#b91c1c", low: "#b45309", ok: "#047857" } as const;
-  const linkStyle = "color:#b91c1c;font-weight:bold;text-decoration:none";
+  const linkStyle = "color:#d11200;font-weight:bold;text-decoration:none";
   const rowsHtml: string[] = [];
   for (const r of attention) {
     const notes: string[] = [];

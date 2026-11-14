@@ -121,7 +121,7 @@ export function competitionModel(win: MonthWindow, cat: CategoryData): Competiti
 
 // ─────────────────────────────── PDF ───────────────────────────────
 const hex = (h: string): RGB => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255) as RGB;
-const C = { RED: hex("#D92D20"), INK: hex("#111317"), MUT: hex("#6B7280"), RULE: hex("#E4E2DC"), TINT: hex("#F5F4F0"), LI: hex("#0A66C2"), LIB: hex("#E8F1FB"), WHITE: [1, 1, 1] as RGB };
+const C = { RED: hex("#FE1B04"), INK: hex("#111317"), MUT: hex("#6B7280"), RULE: hex("#E4E2DC"), TINT: hex("#F5F4F0"), LI: hex("#0A66C2"), LIB: hex("#E8F1FB"), WHITE: [1, 1, 1] as RGB };
 const PW = 612, PH = 792, M = 40, CW = PW - 2 * M;
 function clip(s: string, size: number, bold: boolean, max: number) {
   s = String(s ?? "");
@@ -234,7 +234,7 @@ export function competitionPdf(win: MonthWindow, m: CompetitionModel, build: str
 }
 
 // ─────────────────────────────── EMAIL ───────────────────────────────
-const K = { red: "#D92D20", ink: "#111317", mut: "#6B7280", rule: "#E4E2DC", tint: "#F5F4F0", li: "#0A66C2", lib: "#E8F1FB" };
+const K = { red: "#FE1B04", ink: "#111317", mut: "#6B7280", rule: "#E4E2DC", tint: "#F5F4F0", li: "#0A66C2", lib: "#E8F1FB" };
 const F = "font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif";
 const e = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const sec = (t: string) => `<tr><td style="padding:22px 28px 8px"><div style="font-size:11px;font-weight:700;letter-spacing:.8px;color:${K.mut};border-bottom:1px solid ${K.rule};padding-bottom:6px">${e(t.toUpperCase())}</div></td></tr>`;

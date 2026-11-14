@@ -9,7 +9,7 @@ import type { CategoryModel, CompanyModel, MonthWindow, Tile } from "./model";
 
 const hex = (h: string): RGB => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255) as RGB;
 const C = {
-  RED: hex("#D92D20"), INK: hex("#111317"), MUT: hex("#6B7280"), RULE: hex("#E4E2DC"), TINT: hex("#F5F4F0"),
+  RED: hex("#FE1B04"), INK: hex("#111317"), MUT: hex("#6B7280"), RULE: hex("#E4E2DC"), TINT: hex("#F5F4F0"),
   GOOD: hex("#067647"), GOODB: hex("#E7F3EC"), WHITE: [1, 1, 1] as RGB, LI: hex("#0A66C2"), X: hex("#111317"),
 };
 const PW = 612, PH = 792, M = 40, CW = PW - 2 * M;

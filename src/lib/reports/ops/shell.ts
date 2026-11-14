@@ -24,7 +24,7 @@ import { withAuditBcc } from "@/lib/mail-bcc";
 export const RED = "#FE1B04";
 export const GREEN = "#047857";
 export const AMBER = "#b45309";
-export const DARK_RED = "#b91c1c";
+export const DARK_RED = "#d11200";
 export const GREY = "#6b7280";
 export const SITE = siteUrl();
 

@@ -35,6 +35,7 @@ import type { ClientType } from "@prisma/client";
 import prisma from "@/lib/db-raw";
 import { siteUrl } from "@/lib/site";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { sendResend } from "@/lib/resend-send";
 import { flushHeld, hold, markSent, shouldHold, shouldHoldOnArrival } from "@/lib/mail-burst";
 import { mailIdempotencyKey, sortedIds, type BurstMail } from "@/lib/mail-dedupe";
 import { PUBLISH_MAILS, PUBLISH_ORIGIN, PUBLISH_REPLY_TO, numberedSubject, publishFrom, publishHtml, publishLink, type MailAudience, type PubMail } from "@/lib/publishing-mail";
@@ -460,24 +461,18 @@ export async function sendMail(
   if (!apiKey || !to) return false;
   const aud = audience ?? PUBLISH_MAILS[mail].audience;
   try {
-    const r = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-        // v0.11.3: Resend sends a given key only once within 24 h (PUB-212 once a day).
-        ...(opts.idempotencyKey ? { "Idempotency-Key": opts.idempotencyKey } : {}),
-      },
-      body: JSON.stringify(withAuditBcc({
-        from: publishFrom(aud),
-        reply_to: PUBLISH_REPLY_TO,
-        to: [to],
-        // v0.16.1: client emails keep Olivier's fixed subject (clientSubject), no [PUB-1xx] prefix.
-        subject: aud === "client" ? subject : numberedSubject(mail, subject),
-        html: publishHtml(mail, aud, html, cta),
-        tags: [{ name: "platform", value: "publish" }, { name: "email", value: PUBLISH_MAILS[mail].no.replace("-", "_") }],
-      })),
-    });
+    // v0.11.3: Resend sends a given key only once within 24 h (PUB-212 once a day).
+    // v0.18.6: lib/resend-send.ts retries 429/5xx/network 3x with that same key
+    // (or one fresh UUID per email), so a retry never double-sends.
+    const r = await sendResend(apiKey, withAuditBcc({
+      from: publishFrom(aud),
+      reply_to: PUBLISH_REPLY_TO,
+      to: [to],
+      // v0.16.1: client emails keep Olivier's fixed subject (clientSubject), no [PUB-1xx] prefix.
+      subject: aud === "client" ? subject : numberedSubject(mail, subject),
+      html: publishHtml(mail, aud, html, cta),
+      tags: [{ name: "platform", value: "publish" }, { name: "email", value: PUBLISH_MAILS[mail].no.replace("-", "_") }],
+    }), { idempotencyKey: opts.idempotencyKey, label: PUBLISH_MAILS[mail].no });
     return r.ok;
   } catch {
     return false;

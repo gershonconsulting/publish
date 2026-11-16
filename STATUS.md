@@ -1,5 +1,10 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-14 (v0.18.5 on main: PRs #25, #26, #24, #27 merged in the night push)
+Last updated: 2026-11-16 (v0.18.5 on main; v0.18.6 Resend retry in PR)
+
+## v0.18.6 — Resend retry (PR nightly/2026-11-16-publish-resend-retry, not merged)
+- ✅ lib/resend-send.ts: every Resend send retries network/429/5xx 3x (1s/4s/10s) with the same Idempotency-Key; 4xx not retried; final failure logged
+- ✅ tsc clean, tests 92/92, next build passes
+- ❌ Not merged / not deployed
 
 ## v0.18.5 on main — merged 2026-11-14 (Olivier 03:24 ET: "Do them, release them. I test tomorrow")
 - ✅ #25 v0.18.3: no more "<!DOCTYPE … is not valid JSON" — lib/api-call.ts callApi() retries once on HTML/429/5xx,

@@ -17,6 +17,7 @@ import { buildPostingAlert, SENT_KEY, DEFAULT_TO, type PeriodKind, type PostingA
 import { alertSubject, renderAlertBody, wrapAlertEmail } from "./render";
 import { resolveFrom } from "@/lib/email/sender";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { sendResend } from "@/lib/resend-send";
 
 export async function readSent(): Promise<Record<string, string>> {
   const row = await prisma.setting.findUnique({ where: { key: SENT_KEY } });
@@ -45,14 +46,10 @@ async function sendViaResend(html: string, subject: string, to: string) {
   if (!apiKey) return { ok: false, error: "RESEND_API_KEY not set in environment" };
   const from = resolveFrom();
   try {
-    const r = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(withAuditBcc({ from, to, subject, html })),
-    });
+    // v0.18.6: retries 429/5xx/network 3x with one Idempotency-Key (lib/resend-send.ts).
+    const r = await sendResend(apiKey, withAuditBcc({ from, to, subject, html }), { label: "posting-alert" });
     if (!r.ok) {
-      const body = await r.text().catch(() => "");
-      return { ok: false, status: r.status, error: body.slice(0, 300) };
+      return { ok: false, status: r.status, error: (r.error || "").slice(0, 300) };
     }
     return { ok: true, status: r.status };
   } catch (e) {

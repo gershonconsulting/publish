@@ -17,7 +17,7 @@ import { useSelectedClient } from "@/lib/selected-client";
 import { MyXAccounts } from "@/components/publishing/my-x-accounts";
 import { XConnectLinks } from "@/components/publishing/x-connect-links";
 import { LiConnectLinks } from "@/components/publishing/li-connect-links";
-import { Check, ChevronDown, ChevronRight, Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, XCircle, ChevronRight, Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { NetChip } from "@/components/publishing/shared";
 import { LinkedAccountsCard } from "@/components/settings/linked-accounts-card";
 import { MyLinkedInPages } from "@/components/publishing/my-linkedin-pages";
@@ -67,7 +67,10 @@ type Row = {
 export function PublishingAccountsClient() {
   const [allRows, setRows] = useState<Row[] | null>(null);
   // v0.3.0: narrowed to the client picked in the left-menu client list.
-  const { clientId } = useSelectedClient();
+  const { clientId, clients } = useSelectedClient();
+  // v0.19.1 (Olivier 2026-11-17): a picked company's Connections is only about
+  // that company, with ✅ / ❌; every company's view is "All connections".
+  const picked = clientId ? clients?.find((c) => c.id === clientId) ?? null : null;
   const rows = allRows && clientId ? allRows.filter((r) => r.id === clientId) : allRows;
   const [browsers, setBrowsers] = useState<BrowserRow[]>([]);
   const [canWrite, setCanWrite] = useState(false);
@@ -104,9 +107,11 @@ export function PublishingAccountsClient() {
   return (
     <div>
       <Header
-        title="Connections"
+        title={clientId ? `${picked?.name || "Company"} — Connections` : "All connections"}
         eyebrow="Publishing"
-        subtitle="Can each company's posts go out on LinkedIn and X right now — and if not, exactly what to fix. Posts are published by the Chrome that is signed in to that account, through the Publish extension (Social's extension still publishes too during the transition)."
+        subtitle={clientId
+          ? `Can ${picked?.name || "this company"}'s posts go out on LinkedIn and X right now — ✅ ready, ❌ what to fix.`
+          : "Can each company's posts go out on LinkedIn and X right now — and if not, exactly what to fix. Posts are published by the Chrome that is signed in to that account, through the Publish extension (Social's extension still publishes too during the transition)."}
         actions={
           <button onClick={() => void load()} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
             <RefreshCw size={14} /> Refresh
@@ -115,19 +120,21 @@ export function PublishingAccountsClient() {
       />
       {err && <div className="text-sm rounded-lg px-3 py-2 mb-4 bg-red-50 text-red-800">{err}</div>}
 
-      <MyLinkedInPages onChanged={() => void load()} />
-
-      {/* v0.8.0: the X twin of "Your LinkedIn pages" — accounts already signed in to the Chromes. */}
-      <MyXAccounts browsers={browsers} rows={allRows} canWrite={canWrite} onChanged={() => void load()} />
-      <XConnectLinks canWrite={canWrite} />
-      <LiConnectLinks canWrite={canWrite} />
-
-      <PublishingChromes browsers={browsers} />
+      {!clientId && (
+        <>
+          <MyLinkedInPages onChanged={() => void load()} />
+          {/* v0.8.0: the X twin of "Your LinkedIn pages" — accounts already signed in to the Chromes. */}
+          <MyXAccounts browsers={browsers} rows={allRows} canWrite={canWrite} onChanged={() => void load()} />
+          <XConnectLinks canWrite={canWrite} />
+          <LiConnectLinks canWrite={canWrite} />
+          <PublishingChromes browsers={browsers} />
+        </>
+      )}
 
       {rows && conns.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 mb-3 text-sm">
-          <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500" /> {ready} ready</span>
-          {missing > 0 && <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-600" /> {missing} need attention</span>}
+          <span className="inline-flex items-center gap-1.5"><CheckCircle2 size={15} className="text-emerald-600" /> {ready} ready</span>
+          {missing > 0 && <span className="inline-flex items-center gap-1.5"><XCircle size={15} className="text-red-600" /> {missing} need attention</span>}
         </div>
       )}
 
@@ -141,12 +148,19 @@ export function PublishingAccountsClient() {
         </div>
       )}
 
-      <div className="mt-8 border-t border-gray-200 pt-4">
+      {clientId && (
+        <div className="mt-5">
+          <LiConnectLinks canWrite={canWrite} onlyClientId={clientId} />
+          <XConnectLinks canWrite={canWrite} onlyClientId={clientId} />
+        </div>
+      )}
+
+      {!clientId && <div className="mt-8 border-t border-gray-200 pt-4">
         <button onClick={() => setShowApi((v) => !v)} className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
           {showApi ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Advanced — per-company API connections (optional; LinkedIn posts still go out through the extension)
         </button>
         {showApi && <div className="mt-3"><LinkedAccountsCard /></div>}
-      </div>
+      </div>}
     </div>
   );
 }
@@ -226,16 +240,16 @@ function AccountRow({ r, canWrite, onSaved }: { r: Row; canWrite: boolean; onSav
         </button>
       </div>
       {r.route === "client" ? (
-        <div className="text-sm text-gray-700">Published by {r.name}&apos;s own Chrome extension — {r.client?.live.overall.label.replace(/the publishing browser/g, `${r.name}'s browser`)}</div>
+        <div className="text-sm text-gray-700 flex items-center gap-2">{r.client?.live.overall.level === "live" ? <CheckCircle2 size={15} className="text-emerald-600 shrink-0" /> : <XCircle size={15} className="text-red-600 shrink-0" />}<span>Published by {r.name}&apos;s own Chrome extension — {r.client?.live.overall.label.replace(/the publishing browser/g, `${r.name}'s browser`)}</span></div>
       ) : conns.length === 0 ? (
-        <div className="text-sm text-red-800 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-600" /> No LinkedIn page or X account set — press Edit and add them.</div>
+        <div className="text-sm text-red-800 flex items-center gap-2"><XCircle size={15} className="text-red-600" /> No LinkedIn page or X account set — press Edit and add them.</div>
       ) : (
         <div className="space-y-1.5">
           {conns.map((c) => (
             <div key={c.platform + c.target} className="flex items-start gap-2 text-sm">
               <NetChip n={c.platform} />
               <span className="font-medium text-gray-800 min-w-[180px] truncate">{c.platform === "TWITTER" ? "@" + c.target.replace(/^@/, "") : c.target.replace(/^https?:\/\/(www\.)?linkedin\.com\//, "").replace(/\/$/, "")}</span>
-              <span className={`inline-flex items-center gap-1.5 shrink-0 ${TONE[c.level].text}`}><span className={`w-2 h-2 rounded-full ${TONE[c.level].dot}`} />{TONE[c.level].word}</span>
+              <span className={`inline-flex items-center gap-1.5 shrink-0 ${TONE[c.level].text}`}>{c.level === "ok" ? <CheckCircle2 size={15} className="text-emerald-600" /> : <XCircle size={15} className="text-red-600" />}{TONE[c.level].word}</span>
               <span className="text-gray-600 text-[13px]">{c.message}</span>
             </div>
           ))}

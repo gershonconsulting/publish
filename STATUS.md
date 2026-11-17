@@ -1,5 +1,10 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-17 (v0.19.0)
+Last updated: 2026-11-17 (v0.19.1)
+
+## v0.19.1 — Connections split (Olivier 2026-11-17)
+- ✅ Picked company → Connections shows only that company: its LinkedIn/X lines with ✅/❌, its personal LinkedIn + X connect links
+- ✅ "All connections" (every company, Chromes, your pages, API) moved to Workspace, above Intelligence
+- ✅ tsc clean, tests 97/97, next build passes
 
 ## v0.19.0 — clickable links to published posts (Olivier 2026-11-17)
 - ✅ Client dashboard: "Published" card — every post that went out in the window, newest first, "Open on LinkedIn/X"

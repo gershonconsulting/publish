@@ -26,6 +26,7 @@ import { computeRunway, dayLabel, localDate, type Runway, DAY_MS } from "@/lib/p
 import { EXTENSION_LATEST, PUBLISH_BROWSER_ID_PREFIX } from "@/lib/extension-version";
 import { readExtSeen, semverLt } from "@/lib/extension/seen";
 import { healthScore } from "@/lib/publish-score";
+import { liveLink, snippet, type LiveLink } from "@/lib/published-links";
 
 export const BUSINESS_TZ = "America/New_York";
 const STUCK_MS = 20 * 60 * 1000;
@@ -272,6 +273,29 @@ async function trend(orgId: string, companies: Company[], now: number): Promise<
   };
   const c = count(created.map((x) => x.createdAt)), a = count(approved.map((x) => x.approvedAt)), p = count(posted.map((x) => x.postedAt)), f = count(failed.map((x) => x.updatedAt));
   return days.map((day) => ({ day, created: c.get(day) || 0, approved: a.get(day) || 0, published: p.get(day) || 0, failed: f.get(day) || 0 }));
+}
+
+// ── Published posts with their link (v0.19.0) ─────────────────────────────────
+
+export type PublishedRow = {
+  id: string; clientId: string | null; company: string; platform: string;
+  postedAt: string; text: string; verified: boolean; link: LiveLink | null;
+};
+
+/** The posts that went out in the window, newest first, each with a link to open it on the network. */
+async function publishedPosts(orgId: string, companies: Company[], from: Date | null): Promise<PublishedRow[]> {
+  const byId = new Map(companies.map((c) => [c.id, c.name]));
+  const rows = await prisma.scheduledPost.findMany({
+    where: { organizationId: orgId, clientId: { in: companies.map((c) => c.id) }, status: "POSTED", postedAt: from ? { gte: from } : { not: null } },
+    orderBy: { postedAt: "desc" },
+    take: 100,
+    select: { id: true, clientId: true, platform: true, postedAt: true, postUrl: true, externalPostId: true, target: true, text: true, verifiedAt: true },
+  });
+  return rows.map((r) => ({
+    id: r.id, clientId: r.clientId, company: (r.clientId && byId.get(r.clientId)) || "—", platform: r.platform,
+    postedAt: (r.postedAt as Date).toISOString(), text: snippet(r.text), verified: !!r.verifiedAt,
+    link: liveLink({ platform: r.platform, postUrl: r.postUrl, externalPostId: r.externalPostId, target: r.target }),
+  }));
 }
 
 // ── Delivery health ──────────────────────────────────────────────────────────
@@ -580,7 +604,7 @@ export async function dashboard(orgId: string, opts: { window: WindowKey; client
   const browsersRaw = await section(() => listBrowsers(orgId));
   const browsersList = browsersRaw.ok ? browsersRaw.data : [];
   const upcoming = await section(() => nextSevenDays(orgId, companies, now));
-  const [rw, ap, hl, cn, tp, ext, tr] = await Promise.all([
+  const [rw, ap, hl, cn, tp, ext, tr, pub] = await Promise.all([
     section(() => runways(orgId, companies, now)),
     section(() => approvals(orgId, companies, now)),
     section(() => deliveryHealth(orgId, companies, from, now)),
@@ -590,6 +614,7 @@ export async function dashboard(orgId: string, opts: { window: WindowKey; client
     section(() => throughput(orgId, companies, from)),
     section(() => extensionStatus(browsersList)),
     section(() => trend(orgId, companies, now)),
+    section(() => publishedPosts(orgId, companies, from)),
   ]);
   const browsers: Section<BrowserView[]> = browsersRaw.ok ? { ok: true, data: browsersList.map((b) => browserView(b, now)) } : browsersRaw;
   const actions = buildActions({ now, runways: rw, approvals: ap, health: hl, conns: cn, browsers, extension: ext, companies });
@@ -610,6 +635,7 @@ export async function dashboard(orgId: string, opts: { window: WindowKey; client
     throughput: tp,
     extension: ext,
     trend: tr,
+    published: pub,
     score,
     actions,
   };

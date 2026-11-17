@@ -1,5 +1,10 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-16 (v0.18.5 on main; v0.18.6 Resend retry in PR)
+Last updated: 2026-11-17 (v0.19.0)
+
+## v0.19.0 — clickable links to published posts (Olivier 2026-11-17)
+- ✅ Client dashboard: "Published" card — every post that went out in the window, newest first, "Open on LinkedIn/X"
+- ✅ lib/published-links.ts: post URL → X status id → page/profile it was posted on; "Link not recorded" otherwise
+- ✅ "Went out" tile jumps to the list; tsc clean, tests 97/97, next build OK
 
 ## v0.18.6 — Resend retry (PR #28, merged 2026-11-16)
 - ✅ lib/resend-send.ts: every Resend send retries network/429/5xx 3x (1s/4s/10s) with the same Idempotency-Key; 4xx not retried; final failure logged

@@ -29,7 +29,7 @@ type NavItem = {
  *
  * Two levels, always visible:
  *   • All clients — the global dashboard and the views that make sense across
- *     every company (calendar, connections, Autopilot).
+ *     every company (calendar, funnel, Autopilot). All connections: Workspace.
  *   • The picked company — its own dashboard, its Content & review, calendar,
  *     funnel, connections and Knowledge Base. Shown only once a company is
  *     picked, under its name and logo.
@@ -40,7 +40,6 @@ const globalItems: NavItem[] = [
   { href: "/published", icon: CheckCheck, label: "Published" }, // v0.14.0: what went out each day
   { href: "/publishing/calendar", icon: CalendarDays, label: "Calendar" },
   { href: "/publishing/funnel", icon: BarChart3, label: "Content funnel" },
-  { href: "/publishing/accounts", icon: Link2, label: "Connections" },
   { href: "/publishing/autopilot", icon: Bot, label: "Autopilot" },
 ];
 
@@ -53,6 +52,10 @@ const clientItems: NavItem[] = [
   { href: "/publishing/accounts", icon: Link2, label: "Connections" },
   { href: "/knowledge-base", icon: BookOpen, label: "Knowledge Base" },
 ];
+
+// v0.19.1 (Olivier 2026-11-17): every company's connections live in Workspace,
+// above Intelligence; a picked company's "Connections" shows only that company.
+const allConnections: NavItem = { href: "/publishing/accounts", icon: Link2, label: "All connections" };
 
 const workspaceItems: NavItem[] = [
   { href: "/intelligence", icon: Sparkles, label: "Intelligence" },
@@ -146,6 +149,7 @@ export function Sidebar() {
         {/* 4. Workspace tools */}
         <div className="space-y-0.5">
           <div className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#7D838E]">Workspace</div>
+          {link(allConnections, [allConnections], "all")}
           {workspaceItems.map((i) => link(i, workspaceItems, "none"))}
         </div>
 

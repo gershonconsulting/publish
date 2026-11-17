@@ -11,8 +11,10 @@ import { CheckCircle2, Copy, Loader2, RefreshCw, XCircle } from "lucide-react";
 
 type Row = { id: string; name: string; clientType: string; url: string; profile: string | null; connected: string | null; vanity: string | null; expiresAt: string | null; lastError: string | null };
 
-export function LiConnectLinks({ canWrite }: { canWrite: boolean }) {
-  const [rows, setRows] = useState<Row[] | null>(null);
+export function LiConnectLinks({ canWrite, onlyClientId }: { canWrite: boolean; onlyClientId?: string }) {
+  const [allRows, setRows] = useState<Row[] | null>(null);
+  // v0.19.1: on a picked company's Connections, only that company.
+  const rows = allRows && onlyClientId ? allRows.filter((r) => r.id === onlyClientId) : allRows;
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -34,6 +36,7 @@ export function LiConnectLinks({ canWrite }: { canWrite: boolean }) {
     void load();
   }
 
+  if (onlyClientId && rows && rows.length === 0) return null;
   return (
     <section className="bg-white rounded-xl border border-gray-200 p-4 mb-5" id="li-links">
       <h2 className="font-semibold text-gray-900">Personal LinkedIn connect links</h2>

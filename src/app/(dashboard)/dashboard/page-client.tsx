@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, ChevronDown, Loader2, MessageSquare, RefreshCw, Sparkles, Wand2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ExternalLink, Loader2, MessageSquare, RefreshCw, Sparkles, Wand2 } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { useRouter } from "next/navigation";
 import { PortfolioDashboard } from "@/components/publish/portfolio-dashboard";
@@ -26,6 +26,7 @@ import { C, Columns, CoverageBars, Donut, Funnel, Legend, Lines, Meter, ScoreRin
 import { Approvals, Connections, Health, NextSeven, Runway } from "@/components/publish/dashboard-details";
 import type { Action, Aging, ApprovalRow, BrowserView, ConnRow, ExtensionStatus, Failure, NetHealth, RunwayRow, Throughput, TrendPoint, UpcomingRow, WaitingItem, WindowKey } from "@/lib/publish-dashboard";
 import type { HealthScore } from "@/lib/publish-score";
+import type { PublishedRow } from "@/lib/publish-dashboard";
 import type { Analysis } from "@/lib/intelligence";
 
 type Data = {
@@ -42,6 +43,7 @@ type Data = {
   throughput: Section<Throughput>;
   extension: Section<ExtensionStatus>;
   trend: Section<TrendPoint[]>;
+  published?: Section<PublishedRow[]>;
   score: HealthScore;
   actions: Action[];
 };
@@ -159,6 +161,7 @@ function ClientDashboard({ clientId }: { clientId: string }) {
             <AgingCard s={data.approvals} clientId={clientId} />
             <DeliveryCard s={data.health} label={data.windowLabel} />
           </div>
+          {data.published && <PublishedCard s={data.published} label={data.windowLabel} />}
           <ReadinessCard conns={data.connections} browsers={data.browsers} />
           <More data={data} clientId={clientId} />
           <p className="text-[11px] text-gray-400">Updated {ago(data.generatedAt)} · posting days run from tomorrow to the end of next month, in the company&apos;s time zone.</p>
@@ -224,7 +227,7 @@ function StandTiles({ data, clientId }: { data: Data; clientId: string }) {
       <StandTile label="Content ready ahead" {...ready} href={tab("approved")} />
       <StandTile label="Approvals" {...appr} href={tab("review")} />
       <StandTile label="Next 7 days" {...week} href={withClient("/publishing/calendar", clientId)} />
-      <StandTile label="Went out" {...went} href={tab(bad ? "problems" : "published")} />
+      <StandTile label="Went out" {...went} href={bad ? tab("problems") : "#published"} />
     </div>
   );
 }
@@ -575,6 +578,61 @@ function DeliveryCard({ s, label }: { s: Section<{ networks: NetHealth[]; failur
                       ))}
                     </ul>
                   </div>
+                )}
+              </>
+            );
+          }}
+        </SectionBody>
+      </Card>
+    </div>
+  );
+}
+
+/* ── 4d-bis. Published posts, each with its link (v0.19.0) ───────────────── */
+
+function PublishedCard({ s, label }: { s: Section<PublishedRow[]>; label: string }) {
+  const [all, setAll] = useState(false);
+  return (
+    <div id="published" className="scroll-mt-4">
+      <Card title={`Published — ${label}`} subtitle="Every post that went out, newest first. Click to open it on LinkedIn or X.">
+        <SectionBody s={s}>
+          {(rows) => {
+            if (!rows.length) return <p className="text-sm text-gray-500">Nothing published in this period.</p>;
+            const shown = all ? rows : rows.slice(0, 10);
+            return (
+              <>
+                <ul className="divide-y divide-gray-100">
+                  {shown.map((r) => {
+                    const net = r.platform === "TWITTER" ? "X" : "LinkedIn";
+                    return (
+                      <li key={r.id} className="py-2 flex items-center gap-3">
+                        <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded text-white`} style={{ background: r.platform === "TWITTER" ? C.x : C.linkedin }}>{net}</span>
+                        <div className="min-w-0 flex-1">
+                          {r.link ? (
+                            <a href={r.link.href} target="_blank" rel="noopener noreferrer" className="block text-sm text-gray-900 truncate hover:underline">{r.text || "(no text)"}</a>
+                          ) : (
+                            <span className="block text-sm text-gray-900 truncate">{r.text || "(no text)"}</span>
+                          )}
+                          <span className="text-[11px] text-gray-500">
+                            {fmtIn(r.postedAt, ET)}
+                            {r.verified && <span className="inline-flex items-center gap-0.5 ml-2 text-green-700"><CheckCircle2 size={11} /> verified</span>}
+                          </span>
+                        </div>
+                        {r.link ? (
+                          <a href={r.link.href} target="_blank" rel="noopener noreferrer" className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-[#d11200] hover:underline">
+                            {r.link.kind === "post" ? `Open on ${net}` : `Open the ${net} page`} <ExternalLink size={12} />
+                          </a>
+                        ) : (
+                          <span className="shrink-0 text-[11px] text-gray-400">Link not recorded</span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {rows.length > 10 && (
+                  <button onClick={() => setAll(!all)} className="mt-2 text-xs font-medium text-gray-600 hover:underline">
+                    {all ? "Show fewer" : `Show all ${rows.length}${rows.length === 100 ? " (latest 100)" : ""}`}
+                  </button>
                 )}
               </>
             );

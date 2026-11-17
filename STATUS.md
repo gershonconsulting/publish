@@ -1,5 +1,9 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-17 (v0.19.1)
+Last updated: 2026-11-17 (v0.19.2)
+
+## v0.19.2 — clickable Connections (Olivier 2026-11-17)
+- ✅ X + personal LinkedIn connect cards: company name → its Connections; account → x.com / linkedin.com/in profile; connect link shown as a link
+- ❌ Duplicate "Amphasys Bioprocessing" (created 2026-11-16, 0 posts, not connected) next to "Amphasys" (52 posts, @Amphasys + Markus connected) — archive only on Olivier's OK
 
 ## v0.19.1 — Connections split (Olivier 2026-11-17)
 - ✅ Picked company → Connections shows only that company: its LinkedIn/X lines with ✅/❌, its personal LinkedIn + X connect links

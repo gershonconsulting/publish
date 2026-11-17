@@ -24,6 +24,7 @@
 import prisma from "@/lib/db-raw";
 import { openValue, sealValue } from "@/lib/x-session";
 import { SITE } from "@/lib/publishing";
+import { logLinkedChange } from "@/lib/conn-log";
 
 export type LinkNet = "linkedin" | "x";
 export type LiAuthor = { urn: string; name: string; kind: "organization" | "person"; vanity: string | null; id: string };
@@ -114,13 +115,16 @@ export async function getLinked(orgId: string, clientId: string): Promise<Linked
   }
 }
 
-export async function saveLinked(orgId: string, clientId: string, l: Linked): Promise<void> {
+/** by: who made the change (v0.20.0 connection history); omitted = the system. */
+export async function saveLinked(orgId: string, clientId: string, l: Linked, by: string | null = null): Promise<void> {
+  const prev = await getLinked(orgId, clientId).catch(() => ({}) as Linked);
   const value = await sealValue(JSON.stringify(l));
   await prisma.orgSetting.upsert({
     where: { organizationId_key: { organizationId: orgId, key: LINK_KEY(clientId) } },
     create: { organizationId: orgId, key: LINK_KEY(clientId), value },
     update: { value },
   });
+  await logLinkedChange(orgId, clientId, prev, l, by);
 }
 
 // ── OAuth state (one-time, 15 minutes) ───────────────────────────────────────

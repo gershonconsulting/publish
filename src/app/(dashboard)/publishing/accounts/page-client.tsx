@@ -17,6 +17,7 @@ import { useSelectedClient } from "@/lib/selected-client";
 import { MyXAccounts } from "@/components/publishing/my-x-accounts";
 import { XConnectLinks } from "@/components/publishing/x-connect-links";
 import { LiConnectLinks } from "@/components/publishing/li-connect-links";
+import { ConnectionHistory } from "@/components/publishing/connection-history";
 import { Check, CheckCircle2, ChevronDown, XCircle, ChevronRight, Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { NetChip } from "@/components/publishing/shared";
 import { LinkedAccountsCard } from "@/components/settings/linked-accounts-card";
@@ -127,6 +128,7 @@ export function PublishingAccountsClient() {
           <MyXAccounts browsers={browsers} rows={allRows} canWrite={canWrite} onChanged={() => void load()} />
           <XConnectLinks canWrite={canWrite} />
           <LiConnectLinks canWrite={canWrite} />
+          <ConnectionHistory />
           <PublishingChromes browsers={browsers} />
         </>
       )}
@@ -152,6 +154,7 @@ export function PublishingAccountsClient() {
         <div className="mt-5">
           <LiConnectLinks canWrite={canWrite} onlyClientId={clientId} />
           <XConnectLinks canWrite={canWrite} onlyClientId={clientId} />
+          <ConnectionHistory clientId={clientId} />
         </div>
       )}
 

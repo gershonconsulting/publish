@@ -65,14 +65,14 @@ export async function POST(req: NextRequest) {
   const l = await getLinked(c.orgId, cl.id);
   if (b?.action === "disconnect" && (b.net === "linkedin" || b.net === "x")) {
     l[b.net] = null;
-    await saveLinked(c.orgId, cl.id, l);
+    await saveLinked(c.orgId, cl.id, l, c.name || "team");
     return NextResponse.json({ success: true });
   }
   if (b?.action === "author" && l.linkedin) {
     const a = l.linkedin.authors.find((x) => x.urn === b.urn);
     if (!a) return NextResponse.json({ success: false, error: "That page isn't available on this connection." }, { status: 400 });
     l.linkedin.author = a.urn;
-    await saveLinked(c.orgId, cl.id, l);
+    await saveLinked(c.orgId, cl.id, l, c.name || "team");
     // The company's main LinkedIn destination follows the chosen page (never replaces a group).
     const url = liAuthorUrl(a);
     const t = await getTarget(c.orgId, cl.id);

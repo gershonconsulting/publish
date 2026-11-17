@@ -1,5 +1,16 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-17 (v0.19.1)
+Last updated: 2026-11-17 (v0.20.0)
+
+## v0.20.0 — Connection history per company (Olivier 2026-11-17: "I don't know when these pages were disconnected")
+- ✅ Every change to a company's direct connections (LinkedIn page, personal LinkedIn, X) is logged with date + who:
+  connected / reconnected / disconnected / stopped working / working again / expired / page changed
+- ✅ Store: OrgSetting `connlog:<clientId>` (plain JSON, no tokens, last 300 events); hook in saveLinked (lib/conn-log.ts)
+- ✅ Expiries nobody saves are written by the daily cron and on every read, dated at the real expiry
+- ✅ Before today: current connections logged with their own connect date ("reconstructed"); "last post through the
+  connection" and "last failed post" shown as proof of when it last worked
+- ✅ UI: company Connections → "Connection history"; All connections → one line per company (latest LinkedIn/X event)
+- ✅ GET /api/publishing/conn-log[?clientId=]; tests 105/105, tsc clean, next build OK
+- ❌ Past disconnections (before 2026-11-17) were never recorded — only the evidence above can date them
 
 ## v0.19.1 — Connections split (Olivier 2026-11-17)
 - ✅ Picked company → Connections shows only that company: its LinkedIn/X lines with ✅/❌, its personal LinkedIn + X connect links

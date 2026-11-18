@@ -43,7 +43,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ net: string
       l.linkedin = conn;
       // The company now posts on this person's profile: point its LinkedIn destination at it.
       if (conn.vanity && (!t.linkedinUrl || !/\/in\//i.test(t.linkedinUrl))) await saveTarget(st.orgId, st.clientId, { linkedinUrl: `https://www.linkedin.com/in/${conn.vanity}/` });
-      await saveLinked(st.orgId, st.clientId, l);
+      await saveLinked(st.orgId, st.clientId, l, `${conn.authors[0]?.name || "The person"} (connect link)`);
       return backLi({ connected: conn.authors[0].name });
     } catch (e) {
       return backLi({ error: e instanceof Error ? e.message : "Connection failed" });
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ net: string
       }
       l.x = x;
       if (!t.xHandle) await saveTarget(st.orgId, st.clientId, { xHandle: x.username });
-      await saveLinked(st.orgId, st.clientId, l);
+      await saveLinked(st.orgId, st.clientId, l, `@${x.username} (connect link)`);
       return back({ connected: x.username });
     } catch (e) {
       return back({ error: e instanceof Error ? e.message : "Connection failed" });
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ net: string
       const t = await getTarget(st.orgId, st.clientId);
       l.x = await xConnect(code, st.verifier || "", st.by);
       if (!t.xHandle) await saveTarget(st.orgId, st.clientId, { xHandle: l.x.username });
-      await saveLinked(st.orgId, st.clientId, l);
+      await saveLinked(st.orgId, st.clientId, l, st.by);
       return done(`linked=x&company=${encodeURIComponent(st.clientId)}`);
     }
 
@@ -115,7 +115,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ net: string
       }
       const c: LiConn = { ...conn, author: a.urn, lastError: null };
       l.linkedin = c;
-      await saveLinked(st.orgId, cl.id, l);
+      await saveLinked(st.orgId, cl.id, l, st.by);
       const url = liAuthorUrl(a);
       if (url && !t.linkedinUrl) await saveTarget(st.orgId, cl.id, { linkedinUrl: url });
       connected.push(cl.name);

@@ -7,12 +7,25 @@ export const runtime = "edge";
  *      needs attention, once a day, and (v0.7.5) only when that changed;
  *   3. (v0.14.0) PUB-213 to the team when a personal LinkedIn connection
  *      expires within 10 days / has expired — the team forwards the link.
+ *   4. (v0.20.0) brings every company's connection history up to date.
  * POST, Bearer CRON_SECRET. ?force=1 resends today's team email.
  * Triggered by .github/workflows/publishing-daily.yml.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { orgsForInventory, remindReviewers, teamDigest } from "@/lib/publishing-inventory";
 import { remindLiExpiring } from "@/lib/li-connect-link";
+import prisma from "@/lib/db-raw";
+import { PUBLISHING_CLIENT_WHERE } from "@/lib/publishing";
+import { getLinked } from "@/lib/linked-accounts";
+import { syncConnLog } from "@/lib/conn-log";
+
+/** v0.20.0: write expiries (nobody saves anything when a token runs out) into each company's connection history. */
+async function syncAllConnLogs(orgId: string): Promise<number> {
+  const clients = await prisma.client.findMany({ where: { organizationId: orgId, archivedAt: null, status: { not: "ARCHIVED" }, ...PUBLISHING_CLIENT_WHERE }, select: { id: true } });
+  let n = 0;
+  for (const cl of clients) { await syncConnLog(orgId, cl.id, await getLinked(orgId, cl.id)).catch(() => null); n++; }
+  return n;
+}
 
 export async function POST(req: NextRequest) {
   const secret = process.env.CRON_SECRET || process.env.DIGEST_SECRET || process.env.HEALTH_SECRET;
@@ -26,9 +39,11 @@ export async function POST(req: NextRequest) {
       const reminders = await remindReviewers(orgId);
       const digest = await teamDigest(orgId, Date.now(), force);
       const liExpiring = await remindLiExpiring(orgId).catch(() => []);
+      const connLogs = await syncAllConnLogs(orgId).catch(() => 0);
       out[orgId] = {
         reminders,
         liExpiring,
+        connLogs,
         teamEmail: digest.sent,
         unchanged: !!digest.unchanged, // v0.7.5: same state as the last email sent → not resent
         warnings: digest.rows.filter((r) => r.level !== "ok").map((r) => ({ client: r.name, days: r.coverageDays, level: r.level })),

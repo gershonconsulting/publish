@@ -1,5 +1,12 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-17 (v0.19.2)
+Last updated: 2026-11-18 (v0.19.3)
+
+## v0.19.3 — one PUB-203 / PUB-204 per burst (nightly 2026-11-18)
+- ✅ Resend 2026-11-17: [PUB-203] Altavia x4 in 2 min to social@ → now ONE email (held on arrival, sent when quiet 10 min, cap 60 min), like PUB-202
+- ✅ PUB-204 also held on arrival (2026-11-10 x4 replay: 2 → 1); same Idempotency-Key per (post version, comment)
+- ✅ Recipients: team inbox only (alertEmail / social@gershonconsulting.com); client emails unchanged
+- ✅ tsc clean, tests 101/101, npm run build OK
+- ✅ v0.19.2 went live 2026-11-18 02:5xZ (build 42, social@7a2250b) after a 2nd deploy line; the 02:21Z request (build 41) never went live
 
 ## v0.19.2 — clickable Connections (Olivier 2026-11-17)
 - ✅ X + personal LinkedIn connect cards: company name → its Connections; account → x.com / linkedin.com/in profile; connect link shown as a link

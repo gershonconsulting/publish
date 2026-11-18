@@ -1,5 +1,5 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-18 (v0.20.0 in PR #31; main = v0.19.3)
+Last updated: 2026-11-18 (v0.20.0 merged + LIVE)
 
 ## v0.20.0 — Connection history per company (Olivier 2026-11-17: "I don't know when these pages were disconnected")
 - ✅ Every change to a company's direct connections (LinkedIn page, personal LinkedIn, X) is logged with date + who:
@@ -10,6 +10,7 @@ Last updated: 2026-11-18 (v0.20.0 in PR #31; main = v0.19.3)
   connection" and "last failed post" shown as proof of when it last worked
 - ✅ UI: company Connections → "Connection history"; All connections → one line per company (latest LinkedIn/X event)
 - ✅ GET /api/publishing/conn-log[?clientId=]; tests 109/109 (after main 0.19.3 merge), tsc clean, next build OK
+- ✅ 2026-11-18 merged PR #31 (main db37aba, approved by Olivier "All 10"); npm ci, tsc clean, 109/109, build OK; deploy line 12:48Z → live 0.20.0 at 12:51Z (ping commit e80c822). No schema/migration step (OrgSetting JSON only)
 - ❌ Past disconnections (before 2026-11-17) were never recorded — only the evidence above can date them
 
 ## v0.19.3 — one PUB-203 / PUB-204 per burst (nightly 2026-11-18)

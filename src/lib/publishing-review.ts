@@ -9,7 +9,7 @@
 import prisma from "@/lib/db-raw";
 import type { ReviseResult } from "@/lib/publishing-revise";
 import {
-  addEvent, alertTeam, alertTeamBurst, burstSend, mediaCount, esc, getSettings, getTarget, notifyReadyForPublishing, quote, reviewToken, reviewUrl, sendMail, textProblems, validatorOf,
+  addEvent, alertTeamBurst, burstSend, mediaCount, esc, getSettings, getTarget, notifyReadyForPublishing, quote, reviewToken, reviewUrl, sendMail, textProblems, validatorOf,
 } from "@/lib/publishing";
 import { PUBLISH_MAILS, clientSubject, publishLink } from "@/lib/publishing-mail";
 import { markSent } from "@/lib/mail-burst";
@@ -157,8 +157,12 @@ export async function clientAction(
     // v4.55.0 — the comment becomes a new version of the post.
     const r = await reviseNow(orgId, item.id, text, who);
     if (out) out.revised = r;
-    await alertTeam(orgId, `${label} commented on a post`, `<p><b>${esc(who)}</b> (${esc(label)}) wrote:</p>${quote(text)}${revisedHtml(r, item.text)}`, "CLIENT_COMMENTED", { href: publishLink("/publishing", { client: clientId, item: item.id }), label: "Open the post in Publish" },
-      { idempotencyKey: (to) => mailIdempotencyKey(PUBLISH_MAILS.CLIENT_COMMENTED.no, Date.now(), [orgId, clientId, to, item.id, item.version, text]) });
+    // v0.19.3: same key as before (post version + comment); comments in a burst = ONE PUB-203 (team inbox only).
+    await alertTeamBurst(orgId, clientId, "CLIENT_COMMENTED", `${label} commented on a post`, `${label} commented on posts ({n} comments)`,
+      `<p><b>${esc(who)}</b> (${esc(label)}) wrote:</p>${quote(text)}${revisedHtml(r, item.text)}
+       <p><a href="${publishLink("/publishing", { client: clientId, item: item.id })}" style="color:#111">Open this post in Publish</a></p>`,
+      { href: publishLink("/publishing", { client: clientId, item: item.id }), label: "Open the post in Publish" },
+      [item.id, item.version, text]);
     return null;
   }
   if (action === "request_changes") {

@@ -1,16 +1,16 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-17 (v0.20.0)
+Last updated: 2026-11-18 (v0.19.3)
 
-## v0.20.0 — Connection history per company (Olivier 2026-11-17: "I don't know when these pages were disconnected")
-- ✅ Every change to a company's direct connections (LinkedIn page, personal LinkedIn, X) is logged with date + who:
-  connected / reconnected / disconnected / stopped working / working again / expired / page changed
-- ✅ Store: OrgSetting `connlog:<clientId>` (plain JSON, no tokens, last 300 events); hook in saveLinked (lib/conn-log.ts)
-- ✅ Expiries nobody saves are written by the daily cron and on every read, dated at the real expiry
-- ✅ Before today: current connections logged with their own connect date ("reconstructed"); "last post through the
-  connection" and "last failed post" shown as proof of when it last worked
-- ✅ UI: company Connections → "Connection history"; All connections → one line per company (latest LinkedIn/X event)
-- ✅ GET /api/publishing/conn-log[?clientId=]; tests 105/105, tsc clean, next build OK
-- ❌ Past disconnections (before 2026-11-17) were never recorded — only the evidence above can date them
+## v0.19.3 — one PUB-203 / PUB-204 per burst (nightly 2026-11-18)
+- ✅ Resend 2026-11-17: [PUB-203] Altavia x4 in 2 min to social@ → now ONE email (held on arrival, sent when quiet 10 min, cap 60 min), like PUB-202
+- ✅ PUB-204 also held on arrival (2026-11-10 x4 replay: 2 → 1); same Idempotency-Key per (post version, comment)
+- ✅ Recipients: team inbox only (alertEmail / social@gershonconsulting.com); client emails unchanged
+- ✅ tsc clean, tests 101/101, npm run build OK
+- ✅ v0.19.2 went live 2026-11-18 02:5xZ (build 42, social@7a2250b) after a 2nd deploy line; the 02:21Z request (build 41) never went live
+
+## v0.19.2 — clickable Connections (Olivier 2026-11-17)
+- ✅ X + personal LinkedIn connect cards: company name → its Connections; account → x.com / linkedin.com/in profile; connect link shown as a link
+- ❌ Duplicate "Amphasys Bioprocessing" (created 2026-11-16, 0 posts, not connected) next to "Amphasys" (52 posts, @Amphasys + Markus connected) — archive only on Olivier's OK
 
 ## v0.19.1 — Connections split (Olivier 2026-11-17)
 - ✅ Picked company → Connections shows only that company: its LinkedIn/X lines with ✅/❌, its personal LinkedIn + X connect links

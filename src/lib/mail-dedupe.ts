@@ -28,7 +28,7 @@ import { nyDay } from "@/lib/sweep-digest";
 export const BURST_WINDOW_MS = 10 * 60 * 1000;
 
 /** Emails that are grouped when they come in a burst for one company. */
-export const BURST_MAILS = ["REVIEW_ONE", "READY_FOR_PUBLISHING", "CLIENT_CHANGES", "KB_VALIDATION"] as const;
+export const BURST_MAILS = ["REVIEW_ONE", "READY_FOR_PUBLISHING", "CLIENT_CHANGES", "KB_VALIDATION", "CLIENT_COMMENTED"] as const;
 export type BurstMail = (typeof BURST_MAILS)[number];
 
 /** PUB-101 and PUB-102 share one window: both land in the client's inbox. */
@@ -103,8 +103,18 @@ export function groupDue(group: Array<{ at: number }>, lastSentMs: number | null
  */
 export function holdOnArrival(mail: string, postCount: number, lastSentMs: number | null, now: number): boolean {
   if (mail === "READY_FOR_PUBLISHING" && postCount === 1) return true;
+  if (HELD_ON_ARRIVAL.includes(mail)) return true;
   return burstHeld(lastSentMs, now);
 }
+
+/**
+ * v0.19.3 — Resend 2026-11-17, Altavia: [PUB-203] "commented on a post" x4 in 2 min
+ * (22:55:28 → 22:57:30Z) to social@ — one email per comment, never grouped; and
+ * [PUB-204] x5 on 2026-11-10 went out "first at once + the rest grouped" = 2 emails.
+ * Both are INTERNAL per-click notices (team inbox only), so they get the PUB-202
+ * treatment: held even when first, sent as ONE email once the burst is quiet.
+ */
+export const HELD_ON_ARRIVAL: readonly string[] = ["CLIENT_COMMENTED", "CLIENT_CHANGES"];
 
 /** One held email, stored as JSON in org_settings `mailq:<group>:<clientId>:<eventId>`. */
 export type HeldEvent = {

@@ -6,6 +6,7 @@
  * Allow — no client password is ever shared with Gershon.
  */
 import { useCallback, useEffect, useState } from "react";
+import { xProfileUrl } from "@/lib/profile-links";
 import { CheckCircle2, Copy, Loader2, RefreshCw, XCircle } from "lucide-react";
 
 type Row = { id: string; name: string; clientType: string; url: string; xHandle: string | null; connected: string | null; lastError: string | null };
@@ -53,10 +54,18 @@ export function XConnectLinks({ canWrite, onlyClientId }: { canWrite: boolean; o
               <li key={r.id} className="py-2 flex items-center gap-3 text-sm">
                 {ok ? <CheckCircle2 size={16} className="text-green-600 shrink-0" /> : <XCircle size={16} className="text-red-500 shrink-0" />}
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium text-gray-900 truncate">{r.name} <span className="text-xs text-gray-400">{r.clientType}</span></div>
-                  <div className="text-xs text-gray-500 truncate">
-                    {ok ? `Connected as @${r.connected}` : r.lastError ? `Needs reconnecting: ${r.lastError}` : `Not connected${r.xHandle ? ` — expects @${r.xHandle}` : ""}`}
+                  <div className="font-medium text-gray-900 truncate">
+                    <a href={`/publishing/accounts?client=${r.id}`} className="hover:underline">{r.name.trim()}</a>{" "}
+                    <span className="text-xs text-gray-400">{r.clientType}</span>
                   </div>
+                  <div className="text-xs text-gray-500 truncate">
+                    {ok ? (
+                      <>Connected as <a href={xProfileUrl(r.connected!)} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline">@{r.connected}</a></>
+                    ) : r.lastError ? `Needs reconnecting: ${r.lastError}` : (
+                      <>Not connected{r.xHandle && <> — expects <a href={xProfileUrl(r.xHandle)} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline">@{r.xHandle}</a></>}</>
+                    )}
+                  </div>
+                  <a href={r.url} target="_blank" rel="noopener noreferrer" className="block text-xs text-gray-400 hover:text-blue-700 hover:underline truncate" title="Connect link (the page the client opens)">{r.url}</a>
                 </div>
                 <button onClick={() => void copy(r)} className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs hover:bg-gray-50">
                   <Copy size={12} /> {copied === r.id ? "Copied" : "Copy link"}

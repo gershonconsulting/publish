@@ -108,7 +108,7 @@ function replay(sends: { t: number; mail: mm.BurstMail; id: string; batch?: bool
   return out;
 }
 
-test("2026-11-10 replay: PUB-202 x5 → 1 email (v0.18.4), PUB-204 x4 → 2, client PUB-102 x2 + PUB-101 x3 → 3", () => {
+test("2026-11-10 replay: PUB-202 x5 → 1 email (v0.18.4), PUB-204 x4 → 1 (v0.19.3), client PUB-102 x2 + PUB-101 x3 → 3", () => {
   const p202 = replay(["19:51:45", "19:52:45", "19:52:50", "19:52:56", "19:52:58"].map((h, i) => ({ t: at(h), mail: "READY_FOR_PUBLISHING" as const, id: `p${i}` })));
   assert.equal(p202.length, 1, "5 validations in a burst → ONE PUB-202");
   assert.equal(p202[0].n, 5);
@@ -116,7 +116,8 @@ test("2026-11-10 replay: PUB-202 x5 → 1 email (v0.18.4), PUB-204 x4 → 2, cli
   assert.ok(p202[0].t - at("19:52:58") <= m.QUIET_MS + 60_000, "sent within quiet period + one sweep of the last validation");
 
   const p204 = replay(["19:50:23", "19:51:05", "19:51:39", "19:52:35"].map((h, i) => ({ t: at(h), mail: "CLIENT_CHANGES" as const, id: `c${i}` })));
-  assert.equal(p204.length, 2);
+  assert.equal(p204.length, 1, "v0.19.3: PUB-204 is held on arrival like PUB-202 (was 2)");
+  assert.equal(p204[0].n, 4);
 
   const client = replay([
     { t: at("14:17:06"), mail: "REVIEW_ONE", id: "b1", batch: true },
@@ -181,5 +182,32 @@ test("holdOnArrival: a lone PUB-202 is held even first; batches and other emails
   assert.equal(m.holdOnArrival("READY_FOR_PUBLISHING", 1, null, now), true);
   assert.equal(m.holdOnArrival("READY_FOR_PUBLISHING", 6, null, now), false, "“Approve all” = one email, sent now");
   assert.equal(m.holdOnArrival("READY_FOR_PUBLISHING", 6, now - 60_000, now), true);
-  assert.equal(m.holdOnArrival("CLIENT_CHANGES", 1, null, now), false);
+  assert.equal(m.holdOnArrival("CLIENT_CHANGES", 1, null, now), true, "v0.19.3: internal PUB-204 held even first");
+  assert.equal(m.holdOnArrival("CLIENT_COMMENTED", 1, null, now), true, "v0.19.3: internal PUB-203 held even first");
+  assert.equal(m.holdOnArrival("REVIEW_ONE", 1, null, now), false, "client PUB-101 still goes at once");
+  assert.equal(m.holdOnArrival("KB_VALIDATION", 1, null, now), false);
+});
+
+// v0.19.3 — Resend 2026-11-17 (Altavia): [PUB-203] "Altavia commented on a post" x4 to social@
+// at 22:55:28, 22:56:11, 22:57:05, 22:57:30Z — one email per comment, no grouping.
+test("2026-11-17 Altavia replay: PUB-203 x4 → exactly 1 email listing the 4 comments", () => {
+  const times = ["22:55:28", "22:56:11", "22:57:05", "22:57:30"].map((h) => Date.parse(`2026-11-17T${h}Z`));
+  for (const sweepEvery of [60_000, 15 * 60_000]) {
+    const r = replay(times.map((t, i) => ({ t, mail: "CLIENT_COMMENTED" as const, id: `cm${i}` })), sweepEvery);
+    assert.equal(r.length, 1, `one PUB-203 (sweep every ${sweepEvery / 60000} min)`);
+    assert.equal(r[0].n, 4);
+    assert.equal(r[0].mail, "CLIENT_COMMENTED");
+    assert.deepEqual(r[0].ids, ["cm0", "cm1", "cm2", "cm3"]);
+  }
+  const g = times.map((t, i) => ev(`cm${i}`, t, "CLIENT_COMMENTED", { subjectMany: "Altavia commented on posts ({n} comments)" }));
+  assert.equal(m.combineHeld(g).subject, "Altavia commented on posts (4 comments)");
+  // Same comment re-posted (double click / retry) = same Resend Idempotency-Key.
+  const k = (t: number) => m.mailIdempotencyKey("PUB-203", t, ["org", "altavia", "social@gershonconsulting.com", "post1", 3, "Please shorten"]);
+  assert.equal(k(times[0]), k(times[1]));
+});
+
+test("PUB-203 and PUB-204 are separate groups (each its own number)", () => {
+  const t = Date.parse("2026-11-17T22:55:28Z");
+  const gs = m.groupHeld([ev("a", t, "CLIENT_COMMENTED"), ev("b", t + 1000, "CLIENT_CHANGES"), ev("c", t + 2000, "CLIENT_COMMENTED")]);
+  assert.equal(gs.length, 2);
 });

@@ -12,7 +12,7 @@
  */
 import prisma from "@/lib/db-raw";
 import {
-  BURST_WINDOW_MS, HELD_PREFIX, burstHeld, combineHeld, groupDue, groupHeld, heldKey, holdOnArrival, lastSentKey, mailIdempotencyKey, parseHeld, type HeldEvent,
+  BURST_WINDOW_MS, HELD_ON_ARRIVAL, HELD_PREFIX, burstHeld, combineHeld, groupDue, groupHeld, heldKey, holdOnArrival, lastSentKey, mailIdempotencyKey, parseHeld, type HeldEvent,
 } from "@/lib/mail-dedupe";
 import { PUBLISH_MAILS, type PubMail } from "@/lib/publishing-mail";
 
@@ -39,6 +39,8 @@ export async function markSent(orgId: string, mail: string, clientId: string, no
 /** True when this email must be held: one of the same group went to this company within the window. */
 export async function shouldHold(orgId: string, mail: string, clientId: string | null | undefined, now = Date.now()): Promise<boolean> {
   if (!clientId) return false;
+  // v0.19.3: internal per-click notices (PUB-203, PUB-204) are held even when first, like a lone PUB-202.
+  if (HELD_ON_ARRIVAL.includes(mail)) return true;
   return burstHeld(await lastSentAt(orgId, mail, clientId), now, BURST_WINDOW_MS);
 }
 

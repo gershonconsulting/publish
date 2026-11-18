@@ -9,7 +9,9 @@ Create, approve, schedule and publish. Internal Gershon platform, one of three s
 | Social | social.gershon.ai | Clients (standalone intelligence) |
 | Social Tracking | socialtracking.gershon.ai | Gershon team |
 
-## Phase 1 (this version, v0.1.0)
+**Current version: v0.19.2** (source of truth: `package.json`; history in `HANDOFF.txt`). 2026-11-18 nightly: docs refreshed.
+
+## Phase 1 (first release, v0.1.0)
 
 - Own domain, own Cloudflare Pages project (`gershon-publish`), own LinkedIn sign-in app.
 - Only Publish pages and APIs; product-specific menu.

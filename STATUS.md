@@ -1,5 +1,16 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-18 (v0.19.3)
+Last updated: 2026-11-18 (v0.20.0 in PR #31; main = v0.19.3)
+
+## v0.20.0 — Connection history per company (Olivier 2026-11-17: "I don't know when these pages were disconnected")
+- ✅ Every change to a company's direct connections (LinkedIn page, personal LinkedIn, X) is logged with date + who:
+  connected / reconnected / disconnected / stopped working / working again / expired / page changed
+- ✅ Store: OrgSetting `connlog:<clientId>` (plain JSON, no tokens, last 300 events); hook in saveLinked (lib/conn-log.ts)
+- ✅ Expiries nobody saves are written by the daily cron and on every read, dated at the real expiry
+- ✅ Before today: current connections logged with their own connect date ("reconstructed"); "last post through the
+  connection" and "last failed post" shown as proof of when it last worked
+- ✅ UI: company Connections → "Connection history"; All connections → one line per company (latest LinkedIn/X event)
+- ✅ GET /api/publishing/conn-log[?clientId=]; tests 109/109 (after main 0.19.3 merge), tsc clean, next build OK
+- ❌ Past disconnections (before 2026-11-17) were never recorded — only the evidence above can date them
 
 ## v0.19.3 — one PUB-203 / PUB-204 per burst (nightly 2026-11-18)
 - ✅ Resend 2026-11-17: [PUB-203] Altavia x4 in 2 min to social@ → now ONE email (held on arrival, sent when quiet 10 min, cap 60 min), like PUB-202

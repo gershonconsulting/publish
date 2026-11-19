@@ -12,11 +12,13 @@
 import prisma from "@/lib/db-raw";
 import { getKB, saveKB, type KnowledgeBase } from "@/lib/knowledge-base";
 import { parseBrandText } from "@/lib/brand";
-import { alertTeamBurst, esc } from "@/lib/publishing";
+import { PUBLISHING_CLIENT_WHERE, alertTeamBurst, esc } from "@/lib/publishing";
 import { PUBLISH_ORIGIN, publishLink } from "@/lib/publishing-mail";
 import {
   applyVerdict, currentVerdict, parseState, sectionsOf, statusOf, summarize, levelOfToken,
   type KBSection, type Level, type SectionStatus, type Summary, type ValState, type Verdict, type VerdictStatus,
+  releaseNow,
+  kbGaps,
 } from "@/lib/kb-validation-logic";
 
 const stateKey = (clientId: string) => `kbval:${clientId}`;
@@ -103,6 +105,8 @@ export async function validationOverview(orgId: string, clientId: string) {
   const sections = sectionsOf(kb);
   return {
     releasedAt: state.releasedAt,
+    releasedBy: state.releasedBy ?? null,
+    gaps: kbGaps(kb),
     internal: { url: kbReviewUrl(ti), summary: summarize(sections, state.internal) },
     client: { url: kbReviewUrl(tc), summary: summarize(sections, state.client), open: !!state.releasedAt },
     sections: sections.map((s) => ({
@@ -170,4 +174,46 @@ async function notify(orgId: string, clientId: string, level: Level, s: KBSectio
   return alertTeamBurst(orgId, clientId, "KB_VALIDATION", subject, `${client?.name || "Company"} knowledge: {n} updates (${lvl})`, body,
     { href: publishLink("/knowledge-base", { client: clientId }), label: "Open the Knowledge Base" },
     [level, completedNow ? "complete" : s.id, v.status, v.comment]);
+}
+
+/** v0.23.0: the team opens the client link now, without waiting for the internal check. */
+export async function releaseClientLink(orgId: string, clientId: string, by: string | null): Promise<void> {
+  const state = await getValState(orgId, clientId);
+  if (state.releasedAt) return;
+  await upsert(orgId, stateKey(clientId), JSON.stringify(releaseNow(state, by)));
+}
+
+export type KbLinkRow = {
+  clientId: string; name: string; clientType: string;
+  sections: number; gaps: string[];
+  internal: { url: string; ok: number; total: number; complete: boolean };
+  client: { url: string; ok: number; changes: number; total: number; complete: boolean; open: boolean; releasedBy: string | null };
+};
+
+/** v0.23.0: one line per company — its client validation link, what is empty, where validation stands. */
+export async function kbLinks(orgId: string): Promise<KbLinkRow[]> {
+  const clients = await prisma.client.findMany({
+    where: { organizationId: orgId, archivedAt: null, status: { not: "ARCHIVED" }, ...PUBLISHING_CLIENT_WHERE },
+    select: { id: true, name: true, clientType: true },
+    orderBy: { name: "asc" },
+  });
+  const rows: KbLinkRow[] = [];
+  for (const c of clients) {
+    const [kb, state, ti, tc] = await Promise.all([
+      getKB(orgId, c.id),
+      getValState(orgId, c.id),
+      kbReviewToken(orgId, c.id, "internal"),
+      kbReviewToken(orgId, c.id, "client"),
+    ]);
+    const sections = sectionsOf(kb);
+    const si = summarize(sections, state.internal), sc = summarize(sections, state.client);
+    rows.push({
+      clientId: c.id, name: c.name, clientType: String(c.clientType),
+      sections: sections.length, gaps: kbGaps(kb),
+      internal: { url: kbReviewUrl(ti), ok: si.ok, total: si.total, complete: si.complete },
+      client: { url: kbReviewUrl(tc), ok: sc.ok, changes: sc.changes, total: sc.total, complete: sc.complete, open: !!state.releasedAt, releasedBy: state.releasedBy ?? null },
+    });
+  }
+  // Campaign clients first, then internal companies.
+  return rows.sort((a, b) => (a.clientType === "CAMPAIGN" ? 0 : 1) - (b.clientType === "CAMPAIGN" ? 0 : 1) || a.name.localeCompare(b.name));
 }

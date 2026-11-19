@@ -4,11 +4,12 @@ export const runtime = "edge";
  * Knowledge validation for one company.
  *   GET  → { releasedAt, internal: { url, summary }, client: { url, summary, open }, sections }
  *   POST { rotate: "internal" | "client" } → new private link (the old one stops working).
+ *   POST { release: true } (v0.23.0) → open the client link now, without waiting for the internal check.
  */
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
-import { kbReviewToken, validationOverview } from "@/lib/kb-validation";
+import { kbReviewToken, releaseClientLink, validationOverview } from "@/lib/kb-validation";
 
 type Ctx = { params: Promise<{ clientId: string }> };
 
@@ -33,7 +34,15 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (c instanceof NextResponse) return c;
   const { clientId } = await ctx.params;
   if (!(await own(c.orgId, clientId))) return NextResponse.json({ success: false, error: "Company not found" }, { status: 404 });
-  const b = (await req.json().catch(() => null)) as { rotate?: unknown } | null;
+  const b = (await req.json().catch(() => null)) as { rotate?: unknown; release?: unknown } | null;
+  if (b?.release === true) {
+    try {
+      await releaseClientLink(c.orgId, clientId, c.name);
+      return NextResponse.json({ success: true, data: await validationOverview(c.orgId, clientId) });
+    } catch (e) {
+      return NextResponse.json({ success: false, error: e instanceof Error ? e.message : "failed" }, { status: 500 });
+    }
+  }
   if (b?.rotate !== "internal" && b?.rotate !== "client") return NextResponse.json({ success: false, error: "Bad request" }, { status: 400 });
   try {
     await kbReviewToken(c.orgId, clientId, b.rotate, true);

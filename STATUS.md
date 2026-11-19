@@ -1,5 +1,14 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-19 (v0.22.0 merged on Olivier's "ship it")
+Last updated: 2026-11-19 (v0.23.0 Knowledge links)
+
+## v0.23.0 — Knowledge links for every client (Olivier 2026-11-19: "Complete the knowledge Base for everyone… share a dedicated link to all clients so they can validate")
+- ✅ Workspace → Knowledge links (/knowledge-links): one line per company — empty sections, client progress, client link (copy/open), "Copy all client links"
+- ✅ "Fill empty sections" drafts missing parts with Intelligence (overwrite:false — never replaces written text); style/brand retried alone so their reason shows
+- ✅ Client link can be opened without the internal check: POST /api/knowledge-base/links {release:"all"|clientId}, POST …/<id>/validation {release:true}; state.releasedBy recorded; internal link keeps working
+- ✅ GET /api/knowledge-base/links; Validation tab shows "Still empty" + "Open the client link now"
+- ✅ Brand from websites ignores WordPress/Bootstrap/test colours and icon fonts (FRAMEWORK_COLORS, isIconFont)
+- ✅ No schema change (OrgSetting JSON); tsc clean, tests 125/125, next build OK
+- ❌ Writing style needs the company's pre-takeover posts in social.gershon.ai; brand needs a readable website — companies without either stay incomplete until the client shares material
 
 ## v0.22.0 — semi-autopilot, working days only, @company tag (Olivier 2026-11-19)
 - ✅ Autopilot mode "semi" (default): the written month stays DRAFT; ONE PUB-216 email per company/month to the team

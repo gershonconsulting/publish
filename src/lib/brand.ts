@@ -114,6 +114,33 @@ export type SiteFindings = {
 
 const GENERIC_FONTS = new Set(["serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui", "inherit", "initial", "unset", "-apple-system", "blinkmacsystemfont", "segoe ui", "roboto", "helvetica neue", "helvetica", "arial", "apple color emoji", "segoe ui emoji", "segoe ui symbol", "noto color emoji", "ui-sans-serif", "ui-serif", "ui-monospace", "var", "times new roman", "times", "courier new", "courier", "sfmono-regular", "menlo", "monaco", "consolas", "liberation mono", "fontawesome", "font awesome 5 free", "font awesome 6 free", "dashicons", "icomoon", "swiper-icons", "eicons"]);
 
+/**
+ * v0.23.0: colours that come with WordPress, Bootstrap or test pages, not with the
+ * company's brand (found on Altavia, Meteor, VALOS, Enzymicals, PhiTech sites).
+ */
+export const FRAMEWORK_COLORS = new Set([
+  // WordPress admin + block-editor presets
+  "#007CBA", "#006BA1", "#005A87", "#0693E3", "#FF6900", "#FCB900", "#7BDCB5", "#00D084", "#8ED1FC", "#9B51E0", "#CF2E2E", "#ABB8C3", "#F78DA7", "#32373C",
+  // Bootstrap 3 + 4/5
+  "#337AB7", "#3C763D", "#8A6D3B", "#A94442", "#31708F", "#FCF8E3", "#DFF0D8", "#D9EDF7", "#F2DEDE", "#286090", "#23527C",
+  "#0D6EFD", "#6610F2", "#6F42C1", "#D63384", "#DC3545", "#FD7E14", "#FFC107", "#198754", "#20C997", "#0DCAF0", "#007BFF", "#28A745", "#17A2B8",
+  // test / placeholder colours
+  "#FF00C8", "#00FF00", "#FF00FF", "#00FFFF",
+]);
+export function isFrameworkColor(hex: string): boolean {
+  return FRAMEWORK_COLORS.has(hex.toUpperCase());
+}
+/** Icon fonts are not brand typography. */
+export function isIconFont(name: string): boolean {
+  return /icon|awesome|entypo|fontello|material-design|black tie|dashicons|glyph|themify|linearicons|ionicons|simple-line|feather|eicons|swiper|slick|revicons|wpcf7|^fa[-\s]|^fa$/i.test(name.trim());
+}
+/** A brand read earlier, without framework colours and icon fonts (v0.23.0). */
+export function withoutFrameworkNoise(b: Brand): Brand {
+  const colors = b.colors.filter((c) => !isFrameworkColor(c.hex));
+  const fonts = b.fonts.split(",").map((f) => f.trim()).filter((f) => f && !isIconFont(f)).join(", ");
+  return { ...b, colors, fonts };
+}
+
 function abs(url: string, base: string): string | null {
   try {
     return new URL(url.replace(/&amp;/g, "&"), base).toString();
@@ -154,7 +181,7 @@ export function extractFromSite(html: string, cssTexts: string[], baseUrl: strin
   const css = [styleBlocks, inline, ...cssTexts.map((c) => c.slice(0, 600000))].join("\n");
 
   const counts = new Map<string, number>();
-  const add = (hex: string | null, w = 1) => { if (hex) counts.set(hex, (counts.get(hex) || 0) + w); };
+  const add = (hex: string | null, w = 1) => { if (hex && !isFrameworkColor(hex)) counts.set(hex, (counts.get(hex) || 0) + w); };
   for (const m of css.matchAll(/#([0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3})\b/gi)) add(normalizeHex(m[1]));
   for (const m of css.matchAll(/rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})(?:[\s,/]+([\d.]+%?))?\s*\)/gi)) {
     const alpha = m[4] ? (m[4].endsWith("%") ? parseFloat(m[4]) / 100 : parseFloat(m[4])) : 1;
@@ -169,7 +196,7 @@ export function extractFromSite(html: string, cssTexts: string[], baseUrl: strin
       const r = m[2].match(/(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})/);
       if (r) hex = rgbToHex(+r[1], +r[2], +r[3]);
     }
-    if (!hex || namedVars.some((v) => v.name === m[1])) continue;
+    if (!hex || isFrameworkColor(hex) || namedVars.some((v) => v.name === m[1])) continue;
     namedVars.push({ name: m[1], hex });
     add(hex, 5); // a colour the theme names "primary" weighs more than one stray use
   }
@@ -195,7 +222,7 @@ export function extractFromSite(html: string, cssTexts: string[], baseUrl: strin
   const fontCount = new Map<string, number>();
   const addFont = (f: string, w = 1) => {
     const name = f.replace(/["']/g, "").replace(/!important/i, "").trim();
-    if (!name || name.length > 40 || /^var\(|^\d/.test(name) || GENERIC_FONTS.has(name.toLowerCase())) return;
+    if (!name || name.length > 40 || /^var\(|^\d/.test(name) || GENERIC_FONTS.has(name.toLowerCase()) || isIconFont(name)) return;
     fontCount.set(name, (fontCount.get(name) || 0) + w);
   };
   for (const tag of head.match(/<link\b[^>]*>/gi) || []) {

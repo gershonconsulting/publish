@@ -72,3 +72,20 @@ test("parseState drops malformed verdicts", () => {
   assert.equal(st.releasedAt, null);
   assert.deepEqual(v.parseState("{not json"), v.EMPTY_STATE);
 });
+
+test("v0.23.0 releaseNow: opens the client level before the internal check, once", () => {
+  const secs = v.sectionsOf(kb());
+  const st = v.releaseNow(structuredClone(v.EMPTY_STATE), "Olivier", new Date(T));
+  assert.equal(st.releasedAt, T);
+  assert.equal(st.releasedBy, "Olivier");
+  assert.ok(!("error" in v.applyVerdict(st, secs, "client", ok("valueProp"))));
+  assert.equal(v.releaseNow(st, "Someone else").releasedBy, "Olivier");
+  assert.equal(v.parseState(JSON.stringify(st)).releasedBy, "Olivier");
+  assert.equal(v.parseState(JSON.stringify(v.EMPTY_STATE)).releasedBy, null);
+});
+
+test("v0.23.0 kbGaps lists the empty sections", () => {
+  assert.deepEqual(v.kbGaps(kb()), ["Writing style", "Brand identity"]);
+  const empty = { valueProp: { text: "", source: "manual" as const, updatedAt: null }, competitive: { notes: " ", source: "manual" as const, updatedAt: null }, icps: [], style: { text: "", source: "manual" as const, updatedAt: null } };
+  assert.equal(v.kbGaps(empty).length, 5);
+});

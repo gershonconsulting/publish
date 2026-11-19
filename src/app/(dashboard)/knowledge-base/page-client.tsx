@@ -693,6 +693,8 @@ type VVerdict = { status: "ok" | "changes"; comment: string; name: string | null
 type VSummary = { total: number; ok: number; changes: number; pending: number; complete: boolean };
 type Validation = {
   releasedAt: string | null;
+  releasedBy?: string | null;
+  gaps?: string[];
   internal: { url: string; summary: VSummary };
   client: { url: string; summary: VSummary; open: boolean };
   sections: Array<{ id: string; title: string; internal: { status: VStatus; verdict: VVerdict }; client: { status: VStatus; verdict: VVerdict } }>;
@@ -730,6 +732,17 @@ function ValidationView({ clientId, company, canWrite, dirty }: { clientId: stri
       if (!j?.success) throw new Error(j?.error || "Could not make a new link.");
       setV(j.data);
     } catch (e) { setErr(e instanceof Error ? e.message : "Could not make a new link."); }
+    setBusy(null);
+  }
+  async function openNow() {
+    if (!confirm(`Open ${company}'s client link now, without waiting for the internal check? Nothing is sent: you still send the link yourself.`)) return;
+    setBusy("release");
+    try {
+      const r = await fetch(`/api/knowledge-base/${clientId}/validation`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ release: true }) });
+      const j = await r.json().catch(() => null);
+      if (!j?.success) throw new Error(j?.error || "Could not open the link.");
+      setV(j.data);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Could not open the link."); }
     setBusy(null);
   }
   async function copy(level: string, url: string) {
@@ -776,7 +789,13 @@ function ValidationView({ clientId, company, canWrite, dirty }: { clientId: stri
       {dirty && <p className="text-xs text-amber-700">You have unsaved edits in another section. Save them first so the reviewers see them.</p>}
       {err && <p className="text-xs text-red-700">{err}</p>}
       {card("internal", "1. Internal check (Gershon team)", "For the campaign owner. Validates or corrects each section before the client sees it.", v.internal.url, v.internal.summary, false)}
-      {card("client", "2. Client review", v.client.open ? "Open: the client can confirm or correct each section." : "Locked until every section is correct in the internal check. The link already exists, so you can prepare the email.", v.client.url, v.client.summary, !v.client.open)}
+      {card("client", "2. Client review", v.client.open ? `Open: the client can confirm or correct each section.${v.releasedBy ? ` Opened by ${v.releasedBy} before the internal check finished.` : ""}` : "Locked until every section is correct in the internal check. The link already exists, so you can prepare the email.", v.client.url, v.client.summary, !v.client.open)}
+      {!v.client.open && canWrite && (
+        <button disabled={!!busy} onClick={() => void openNow()} className="px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg disabled:opacity-50">
+          {busy === "release" ? "Opening…" : "Open the client link now (skip the internal check)"}
+        </button>
+      )}
+      {!!v.gaps?.length && <p className="text-xs text-amber-800">Still empty, so the client will not see it: {v.gaps.join(", ")}.</p>}
       <table className="w-full text-sm">
         <thead className="text-left text-gray-500"><tr><th className="py-1">Section</th><th>Internal</th><th>Client</th></tr></thead>
         <tbody>

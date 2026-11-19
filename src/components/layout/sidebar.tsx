@@ -9,7 +9,7 @@ import { SocialMark, SocialWordmark } from "@/components/brand/social-mark";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { BarChart3, BookOpen, Bot, CalendarDays, CheckCheck, LayoutDashboard, Link2, LogOut, Puzzle, Send, Settings, Sparkles, X } from "lucide-react";
+import { BadgeCheck, BarChart3, BookOpen, Bot, CalendarDays, CheckCheck, LayoutDashboard, Link2, LogOut, Puzzle, Send, Settings, Sparkles, X } from "lucide-react";
 import { FilterPanel } from "./filter-panel";
 import { Avatar, ClientList } from "./client-list";
 import { useSelectedClient } from "@/lib/selected-client";
@@ -58,6 +58,8 @@ const clientItems: NavItem[] = [
 const allConnections: NavItem = { href: "/publishing/accounts", icon: Link2, label: "All connections" };
 
 const workspaceItems: NavItem[] = [
+  // v0.23.0: every client's Knowledge validation link on one page.
+  { href: "/knowledge-links", icon: BadgeCheck, label: "Knowledge links" },
   { href: "/intelligence", icon: Sparkles, label: "Intelligence" },
   { href: "/extension", icon: Puzzle, label: "Extension" },
   { href: "/settings", icon: Settings, label: "Settings" },

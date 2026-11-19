@@ -23,6 +23,8 @@ export type ValState = {
   client: Record<string, Verdict>;
   /** When every section first passed the internal check: the client link opens from then on. */
   releasedAt: string | null;
+  /** v0.23.0: set when the team opened the client link before the internal check was complete. */
+  releasedBy?: string | null;
 };
 export type SectionKind = "valueProp" | "competitive" | "icp" | "style" | "brand";
 export type KBSection = { id: string; kind: SectionKind; title: string; text: string; source: "ai" | "manual"; updatedAt: string | null };
@@ -103,7 +105,12 @@ export function parseState(raw: string | null | undefined): ValState {
       }
       return out;
     };
-    return { internal: clean(v.internal), client: clean(v.client), releasedAt: typeof v.releasedAt === "string" ? v.releasedAt : null };
+    return {
+      internal: clean(v.internal),
+      client: clean(v.client),
+      releasedAt: typeof v.releasedAt === "string" ? v.releasedAt : null,
+      releasedBy: typeof v.releasedBy === "string" ? v.releasedBy : null,
+    };
   } catch {
     return structuredClone(EMPTY_STATE);
   }
@@ -147,4 +154,29 @@ export function levelOfToken(token: string): Level | null {
   if (/^ki_[a-f0-9]{36}$/.test(token)) return "internal";
   if (/^kc_[a-f0-9]{36}$/.test(token)) return "client";
   return null;
+}
+
+/**
+ * v0.23.0 (Olivier 2026-11-19: "share a dedicated link to all clients so they can
+ * validate"): the team may open the client link without waiting for the internal
+ * check. The internal link keeps working; an edit there sends the section back to
+ * "to check" for the client too (fingerprint). Already open → unchanged.
+ */
+export function releaseNow(state: ValState, by: string | null, now: Date = new Date()): ValState {
+  if (state.releasedAt) return state;
+  const next: ValState = structuredClone(state);
+  next.releasedAt = now.toISOString();
+  next.releasedBy = (by || "").trim().slice(0, 80) || "Gershon team";
+  return next;
+}
+
+/** The Knowledge Base sections still empty, in reading order (what a client would not see). */
+export function kbGaps(kb: KBLike): string[] {
+  const gaps: string[] = [];
+  if (!kb.valueProp.text.trim()) gaps.push("Value proposition");
+  if (!kb.competitive.notes.trim()) gaps.push("Competitive landscape");
+  if (!kb.icps.some((i) => i?.id && (i.description || "").trim())) gaps.push("Ideal customers");
+  if (!(kb.style.text || "").trim()) gaps.push("Writing style");
+  if (!(kb.brand ? brandText(kb.brand) : "").trim()) gaps.push("Brand identity");
+  return gaps;
 }

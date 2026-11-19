@@ -66,6 +66,8 @@ export const PUBLISH_MAILS = {
   // v0.16.0: Knowledge validation (internal check, then the client) — a section needs
   // changes, or a level is complete. The review links themselves are never emailed by Publish.
   KB_VALIDATION: { no: "PUB-214", audience: "internal", title: "Knowledge validation update" },
+  // v0.21.0: every Monday, which companies lack a direct LinkedIn / X connection — to report@gershonconsulting.com.
+  CONN_WEEKLY: { no: "PUB-215", audience: "internal", title: "Weekly connections report" },
   // A validation email (1xx) that goes to the team because the company has no
   // reviewer is re-labelled internal at send time, keeping its number.
 } as const satisfies Record<string, MailDef>;

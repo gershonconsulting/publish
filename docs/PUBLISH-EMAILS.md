@@ -38,6 +38,7 @@ Two families: **1xx = client emails**, **2xx = internal emails**. Code: `src/lib
 | PUB-212 | Internal | **Posts that did not go out (digest)** — one per sweep run: `[PUB-212] N posts did not go out today` (+ "— X signed out"), or `[PUB-212] LinkedIn signed out — N scheduled posts are on hold` when only sign-outs. Table: company, network, what happened, reason, direct link (v0.7.5) | each post (calendar, `?client=&item=`) + calendar |
 | PUB-213 | Internal | Personal LinkedIn connection expiring (v0.14.0) | Connections |
 | PUB-214 | Internal | Knowledge validation update (v0.16.0): a section was marked "Needs changes" (internal or client check), or every section passed one level. Publish never emails the review links themselves. | Knowledge Base |
+| PUB-215 | Internal | Weekly connections report (v0.21.0), Mondays (New York), to report@gershonconsulting.com: companies with no direct LinkedIn/X connection, expired/broken ones, one posting elsewhere, or expiring within 14 days, plus the week's connection changes. | Connections |
 
 PUB-212 (v0.7.5): misses (205), stuck posts (206), failures from the Chrome extension (207) or a connected
 account (208) and sign-outs (209) found in one sweep go out as ONE email. Each post is reported once (ledger

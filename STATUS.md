@@ -1,5 +1,12 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-18 (v0.20.0 merged + LIVE)
+Last updated: 2026-11-19 (v0.21.0 weekly connections report)
+
+## v0.21.0 — Weekly connections report PUB-215 (Olivier 2026-11-19: "Warning of lack of connections weekly by email to report")
+- ✅ Every Monday (New York) the daily cron emails report@gershonconsulting.com (env CONN_REPORT_TO overrides):
+  per company 🔴 not connected / expired / stopped working, 🟠 posts elsewhere / expires ≤14 days / no destination, 🟢 OK; + this week's connection changes
+- ✅ Once per Monday (OrgSetting conn_report_week + Resend Idempotency-Key); LinkedIn groups = extension only, not a gap
+- ✅ Preview: GET /api/publishing/conn-report (?format=html); send now: cron POST ?connReport=1
+- ✅ lib/conn-report-model.ts (pure, 8 tests), lib/conn-report.ts; no schema change; tsc clean, 117/117, build OK
 
 ## v0.20.0 — Connection history per company (Olivier 2026-11-17: "I don't know when these pages were disconnected")
 - ✅ Every change to a company's direct connections (LinkedIn page, personal LinkedIn, X) is logged with date + who:

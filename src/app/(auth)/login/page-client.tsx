@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import { Check, Download, Loader2 } from "lucide-react";
 import { EXTENSION_ZIP_URL, EXTENSION_ZIP_NAME } from "@/lib/extension-version";
 import { PRODUCT_LOGIN_HEADLINE, PRODUCT_LOGIN_SUBLINE, PRODUCT_LOGIN_POINTS } from "@/lib/product";
-import { PRODUCT_HOME } from "@/lib/product";
+import { PRODUCT_HOME, PRODUCT_NAME, PRODUCT_VERSION } from "@/lib/product";
 
 const POINTS: readonly string[] = PRODUCT_LOGIN_POINTS;
 
@@ -168,6 +168,10 @@ export default function LoginPage() {
           <Download size={14} />
           Download the Publish Chrome extension
         </a>
+
+        <footer className="mt-6 text-[11px] text-gray-500 font-mono">
+          {PRODUCT_NAME} by Gershon.AI &middot; v{PRODUCT_VERSION}
+        </footer>
       </section>
     </div>
   );

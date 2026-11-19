@@ -47,7 +47,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <PublishExtensionBanner />
             {children}
             <footer className="mt-12 pt-4 border-t border-gray-200 text-[11px] text-gray-500 font-mono">
-              {PRODUCT_NAME} v{PRODUCT_VERSION}
+              {PRODUCT_NAME} by Gershon.AI &middot; v{PRODUCT_VERSION}
               {BUILD_NUMBER && <> &middot; Build #{BUILD_NUMBER}</>} &middot; {shortSha} &middot; {formatBuildDate(BUILD_DATE)}
             </footer>
           </div>

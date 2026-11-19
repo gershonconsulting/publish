@@ -68,6 +68,8 @@ export const PUBLISH_MAILS = {
   KB_VALIDATION: { no: "PUB-214", audience: "internal", title: "Knowledge validation update" },
   // v0.21.0: every Monday, which companies lack a direct LinkedIn / X connection — to report@gershonconsulting.com.
   CONN_WEEKLY: { no: "PUB-215", audience: "internal", title: "Weekly connections report" },
+  // v0.22.0: semi-autopilot — the written month waits for the team's check before any client sees it.
+  AUTOPILOT_TEAM_CHECK: { no: "PUB-216", audience: "internal", title: "Autopilot month to check before the client" },
   // A validation email (1xx) that goes to the team because the company has no
   // reviewer is re-labelled internal at send time, keeping its number.
 } as const satisfies Record<string, MailDef>;

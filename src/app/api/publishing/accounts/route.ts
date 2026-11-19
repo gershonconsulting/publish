@@ -15,7 +15,7 @@ import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import {
   connectUrl, getPublisherState, getRoute, getTarget, liveStatus, publishKey, reviewToken, reviewUrl, saveTarget, setRoute, PUBLISHING_CLIENT_WHERE,
-  InvalidReviewerEmailError, destinationsOf,
+  InvalidReviewerEmailError, destinationsOf, resolveTag,
 } from "@/lib/publishing";
 import { isOnline, listBrowsers, targetStatus, type PublishBrowser } from "@/lib/publish-browsers";
 import { directStatus } from "@/lib/linked-publish";
@@ -38,7 +38,8 @@ async function row(orgId: string, cl: { id: string; name: string; clientType: st
   const all = browsers ?? (await listBrowsers(orgId));
   // v0.14.1: a direct (API) connection wins over the Chrome check.
   const connections = route === "client" ? [] : await Promise.all(destinationsOf(t).map(async (d) => (await directStatus(orgId, cl.id, d).catch(() => null)) || targetStatus(all, d.network, d.target)));
-  return { ...cl, ...t, reviewUrl: reviewUrl(token), pending, route, client, connections };
+  const tag = await resolveTag(orgId, cl.id).catch(() => null);
+  return { ...cl, ...t, reviewUrl: reviewUrl(token), pending, route, client, connections, tag };
 }
 
 function browserView(b: PublishBrowser) {
@@ -76,7 +77,7 @@ async function clientOf(orgId: string, id: unknown) {
 export async function PUT(req: NextRequest) {
   const c = await publishingCaller(true);
   if (c instanceof NextResponse) return c;
-  const b = ((await req.json().catch(() => null)) || {}) as Record<string, string | null | undefined> & { destinations?: unknown; xKind?: string };
+  const b = ((await req.json().catch(() => null)) || {}) as Record<string, string | null | undefined> & { destinations?: unknown; xKind?: string; tagOff?: boolean };
   const cl = await clientOf(c.orgId, b.clientId);
   if (!cl) return NextResponse.json({ success: false, error: "Unknown client." }, { status: 400 });
   // v4.59.0 audit: save the target first (it validates the reviewer email) so a
@@ -86,6 +87,8 @@ export async function PUT(req: NextRequest) {
       xHandle: b.xHandle, linkedinUrl: b.linkedinUrl, reviewerName: b.reviewerName, reviewerEmail: b.reviewerEmail,
       xKind: b.xKind === undefined ? undefined : b.xKind === "personal" ? "personal" : "company",
       destinations: b.destinations === undefined ? undefined : (b.destinations as never),
+      // v0.22.0: the company tagged (@) on every post.
+      tagName: b.tagName, tagLinkedin: b.tagLinkedin, tagX: b.tagX, tagOff: b.tagOff === undefined ? undefined : !!b.tagOff,
     });
   } catch (e) {
     if (e instanceof InvalidReviewerEmailError) return NextResponse.json({ success: false, error: "Invalid reviewer email" }, { status: 400 });

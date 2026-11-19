@@ -30,6 +30,7 @@ export async function PUT(req: NextRequest) {
     if (typeof b.postTime === "string") patch.postTime = b.postTime;
     if (b.autoApproveHours !== undefined) patch.autoApproveHours = Number(b.autoApproveHours);
     if (b.monthDay !== undefined) patch.monthDay = Number(b.monthDay);
+    if (b.mode === "semi" || b.mode === "auto") patch.mode = b.mode; // v0.22.0
     await saveAutopilotSettings(c.orgId, patch);
     return NextResponse.json({ success: true, data: await status(c.orgId) });
   } catch (e) {

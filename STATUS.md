@@ -1,5 +1,19 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-19 (v0.21.0 weekly connections report)
+Last updated: 2026-11-19 (v0.22.0 merged on Olivier's "ship it")
+
+## v0.22.0 — semi-autopilot, working days only, @company tag (Olivier 2026-11-19)
+- ✅ Autopilot mode "semi" (default): the written month stays DRAFT; ONE PUB-216 email per company/month to the team
+  with a link to its Content & review; the team sends it to the client ("Send for review"). "Full" = old behaviour
+- ✅ Working days only: Autopilot plans Mon–Fri; scheduleItem moves any Sat/Sun post to Monday same NY time;
+  runway slots capped at 5/week; Intelligence "Fill the gap" skips weekends; Autopilot objective 7 → 5
+- ✅ Existing weekend posts (daily Autopilot step): moved to the next free weekday; unseen Autopilot/Intelligence
+  drafts with no free day that week are deleted (≤40 per run)
+- ✅ @company: tag added when a post is sent for review (reviewer sees it), when Autopilot/Intelligence write it, and
+  at scheduling; never on the company's own page/X account. LinkedIn API → real mention when the page number is known
+  (Connections → company → "Company tag"); browser route → plain "@Name" text
+- ✅ tsc clean, tests 114/114, next build OK
+- ❌ Set Altavia's tag: LinkedIn page number + X handle (Alexandre posts as himself → Altavia tagged)
+
 
 ## v0.21.0 — Weekly connections report PUB-215 (Olivier 2026-11-19: "Warning of lack of connections weekly by email to report")
 - ✅ Every Monday (New York) the daily cron emails report@gershonconsulting.com (env CONN_REPORT_TO overrides):

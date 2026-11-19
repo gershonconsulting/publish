@@ -42,6 +42,8 @@ import { submitForReview } from "@/lib/publishing-review";
 import { aboutOf } from "@/lib/reports/ops/intelligence";
 import { clean, fitTo } from "@/lib/x-fit";
 import { stripLinks } from "@/lib/x-links";
+import { firstFreeWorkday, isWeekendYmd } from "@/lib/work-days";
+import { withCompanyTags } from "@/lib/publishing";
 import { brandPaletteFor, competitiveSnapshot, draftKB, getKB, kbForPrompt, snapshotForPrompt, type KnowledgeBase } from "@/lib/knowledge-base";
 
 export const AUTOPILOT = "Autopilot";
@@ -64,8 +66,16 @@ export type AutopilotSettings = {
   autoApproveHours: number;
   /** Day of the month the next month must be ready. */
   monthDay: number;
+  /**
+   * v0.22.0 (Olivier, 2026-11-19: "Autopilot going too fast"):
+   *  "semi" — the written month waits in Content & review for the Gershon team
+   *           to check it; the team sends it to the client (nothing goes to a
+   *           client by itself). Default.
+   *  "auto" — the month goes straight to the validator (previous behaviour).
+   */
+  mode: "semi" | "auto";
 };
-const DEFAULTS: AutopilotSettings = { enabled: null, clientIds: null, postTime: "09:30", autoApproveHours: 48, monthDay: 20 };
+const DEFAULTS: AutopilotSettings = { enabled: null, clientIds: null, postTime: "09:30", autoApproveHours: 48, monthDay: 20, mode: "semi" };
 
 async function readSetting(orgId: string, key: string): Promise<string | null> {
   const r = await prisma.orgSetting.findUnique({ where: { organizationId_key: { organizationId: orgId, key } } });
@@ -93,6 +103,7 @@ export async function saveAutopilotSettings(orgId: string, patch: Partial<Autopi
   next.autoApproveHours = Math.min(240, Math.max(1, Math.round(Number(next.autoApproveHours) || 48)));
   next.monthDay = Math.min(28, Math.max(1, Math.round(Number(next.monthDay) || 20)));
   if (next.clientIds && !Array.isArray(next.clientIds)) next.clientIds = null;
+  next.mode = next.mode === "auto" ? "auto" : "semi";
   await writeSetting(orgId, SETTINGS_KEY, JSON.stringify(next));
   return next;
 }
@@ -161,7 +172,7 @@ export type PlanWindow = { days: string[]; label: string; monthKey: string; from
  * Which days must be planned now: from the 20th, the whole next month; before
  * it, the rest of this month from three days out (catch-up when switched on).
  */
-export function planWindow(s: AutopilotSettings, now = new Date()): PlanWindow {
+export function planWindow(s: AutopilotSettings, now = new Date(), weekdaysOnly = true): PlanWindow {
   const today = etYmd(now);
   const [y, m, d] = today.split("-").map(Number);
   let start: string, end: string;
@@ -174,7 +185,8 @@ export function planWindow(s: AutopilotSettings, now = new Date()): PlanWindow {
     end = new Date(Date.UTC(y, m, 0, 12)).toISOString().slice(0, 10);
   }
   const days: string[] = [];
-  for (let x = start; x <= end; x = addDays(x, 1)) days.push(x);
+  // v0.22.0: working days only — no Saturday or Sunday posts.
+  for (let x = start; x <= end; x = addDays(x, 1)) if (!weekdaysOnly || !isWeekendYmd(x)) days.push(x);
   return {
     days,
     label: monthLabel(days[0] || start),
@@ -422,7 +434,8 @@ async function generate(orgId: string, s: AutopilotSettings, w: PlanWindow, budg
     }
     for (let i = 0; i < drafts.length && i < chunk.length; i++) {
       const d = drafts[i];
-      const { text, textX } = finalTexts(d, xLimit);
+      // v0.22.0: the company is tagged (@) on every post.
+      const { text, textX } = await withCompanyTags(orgId, c.id, finalTexts(d, xLimit), platforms);
       const item = await prisma.contentItem.create({
         data: {
           organizationId: orgId, clientId: c.id, title: d.title || `${c.name} — ${chunk[i]}`, text, textX,
@@ -454,8 +467,49 @@ async function fixPictures(orgId: string, budget: number): Promise<number> {
   return n;
 }
 
+/**
+ * v0.22.0 semi-autopilot: the written month stays in DRAFT for the Gershon team.
+ * ONE internal email (PUB-215) per company and month, with a link to its
+ * Content & review; the team edits and sends it to the client from there.
+ */
+async function teamCheck(orgId: string, s: AutopilotSettings, w: PlanWindow): Promise<{ submitted: number; emailed: boolean }> {
+  const drafts = await prisma.contentItem.findMany({
+    where: { organizationId: orgId, createdBy: AUTOPILOT, status: "DRAFT", submittedAt: null, scheduledAt: { gte: w.from, lt: w.to } },
+    select: { clientId: true, title: true, text: true, scheduledAt: true },
+    orderBy: { scheduledAt: "asc" },
+  });
+  if (!drafts.length) return { submitted: 0, emailed: false };
+  const key = `autopilot_team_check:${w.monthKey}`;
+  let told: string[] = [];
+  try { told = JSON.parse((await readSetting(orgId, key)) || "[]"); } catch { told = []; }
+  const clients = await autopilotClients(orgId, s);
+  let emailed = false;
+  for (const c of clients) {
+    if (told.includes(c.id)) continue;
+    const mine = drafts.filter((d) => d.clientId === c.id);
+    if (!mine.length) continue;
+    const list = mine
+      .slice(0, 31)
+      .map((i) => `<li style="margin:3px 0"><span style="color:#666">${esc(i.scheduledAt ? i.scheduledAt.toLocaleDateString("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric" }) : "")}</span> — ${esc((i.title || i.text).split("\n")[0].slice(0, 110))}</li>`)
+      .join("");
+    const ok = await alertTeam(
+      orgId,
+      `Autopilot: ${c.name} — ${w.label} to check before the client`,
+      `<p>Autopilot wrote the <b>${esc(w.label)}</b> content of <b>${esc(c.name)}</b> — ${mine.length} posts, Monday to Friday (text, X version, picture, company tag):</p>
+       <ul>${list}</ul>
+       <p><b>Nothing has been sent to ${c.clientType === "CAMPAIGN" ? "the client" : "anyone"}.</b> Check and edit the posts, then press <b>Send for review</b> in Content &amp; review when they are good.</p>`,
+      "AUTOPILOT_TEAM_CHECK",
+      { href: publishLink(`/publishing?client=${c.id}`), label: `Check ${c.name} in Publish` },
+    );
+    if (ok) { told.push(c.id); emailed = true; }
+  }
+  if (emailed) await writeSetting(orgId, key, JSON.stringify(told));
+  return { submitted: 0, emailed };
+}
+
 /** All of the window written → send everything for review, ONE email. Once per month. */
 async function submitMonth(orgId: string, s: AutopilotSettings, w: PlanWindow): Promise<{ submitted: number; emailed: boolean }> {
+  if (s.mode !== "auto") return teamCheck(orgId, s, w);
   const drafts = await prisma.contentItem.findMany({
     where: { organizationId: orgId, createdBy: AUTOPILOT, status: "DRAFT", scheduledAt: { gte: w.from, lt: w.to } },
     select: { id: true, clientId: true },
@@ -592,7 +646,7 @@ async function scheduleApproved(orgId: string, s: AutopilotSettings): Promise<{ 
       let day = etYmd(new Date(now));
       for (let i = 0; i < 60; i++) {
         const t = etInstant(day, s.postTime);
-        if (t.getTime() > now + 10 * 60000 && !taken.has(day)) { when = t; break; }
+        if (t.getTime() > now + 10 * 60000 && !taken.has(day) && !isWeekendYmd(day)) { when = t; break; }
         day = addDays(day, 1);
       }
     }
@@ -609,12 +663,62 @@ async function scheduleApproved(orgId: string, s: AutopilotSettings): Promise<{ 
   return { scheduled, problems: Array.from(new Set(problems)) };
 }
 
-/** Set every Autopilot company's posting objective to 7 a week (one a day), unless it was set by hand. */
+/** Set every Autopilot company's posting objective to 5 a week (one per working day), unless it was set by hand. */
 async function alignObjectives(orgId: string, clientIds: string[]): Promise<void> {
   const { o } = await objectivesFor(orgId, []);
   let changed = false;
-  for (const id of clientIds) if (o.companies[id] === undefined) { o.companies[id] = 7; changed = true; }
+  // v0.22.0: working days only → 5 a week; the old automatic 7 becomes 5 too.
+  for (const id of clientIds) if (o.companies[id] === undefined || o.companies[id] === 7) { o.companies[id] = 5; changed = true; }
   if (changed) await saveObjectives(orgId, o);
+}
+
+/**
+ * v0.22.0: posts already planned on a Saturday/Sunday (from before working days
+ * only) move to the next free working day of the company. Autopilot/Intelligence
+ * drafts nobody has seen yet are removed when that week has no free day left —
+ * they were only written for the weekend slot.
+ */
+export async function clearWeekends(orgId: string, s: AutopilotSettings, now = Date.now()): Promise<{ moved: number; removed: number }> {
+  const items = await prisma.contentItem.findMany({
+    where: {
+      organizationId: orgId, scheduledAt: { gte: new Date(now + 15 * 60000) },
+      status: { in: ["DRAFT", "IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "SCHEDULED"] },
+    },
+    select: { id: true, clientId: true, scheduledAt: true, status: true, createdBy: true, submittedAt: true, version: true },
+    orderBy: { scheduledAt: "asc" },
+    take: 400,
+  });
+  let moved = 0, removed = 0;
+  for (const it of items) {
+    const day = etYmd(it.scheduledAt!);
+    if (!isWeekendYmd(day) || moved + removed >= 40) continue;
+    const taken = new Set(
+      (await prisma.contentItem.findMany({
+        where: { organizationId: orgId, clientId: it.clientId, id: { not: it.id }, status: { not: "FAILED" }, scheduledAt: { gte: etInstant(day, "00:00") } },
+        select: { scheduledAt: true },
+      })).map((r) => etYmd(r.scheduledAt!)),
+    );
+    const free = firstFreeWorkday(day, taken, 7);
+    const machine = it.createdBy === AUTOPILOT || it.createdBy === INTELLIGENCE;
+    if (!free && machine && it.status === "DRAFT" && !it.submittedAt) {
+      await prisma.contentItem.delete({ where: { id: it.id } });
+      removed++;
+      continue;
+    }
+    const target = free || firstFreeWorkday(day, new Set(), 7)!;
+    const hhmm = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(it.scheduledAt!).replace(/^24/, "00");
+    const when = etInstant(target, hhmm);
+    if (it.status === "SCHEDULED") {
+      const p = await scheduleItem(orgId, it.id, when);
+      if (p.length) continue;
+    } else {
+      await prisma.contentItem.update({ where: { id: it.id }, data: { scheduledAt: when } });
+    }
+    await addEvent(orgId, it.id, it.version, "comment", "team", "Publishing", `Moved from ${day} to ${target}: no Saturday or Sunday posts.`);
+    moved++;
+  }
+  void s;
+  return { moved, removed };
 }
 
 export type StepResult = {
@@ -630,6 +734,9 @@ export type StepResult = {
   emailed: boolean;
   problems: string[];
   errors: string[];
+  /** v0.22.0: weekend posts moved / unseen weekend drafts removed. */
+  weekendMoved?: number;
+  weekendRemoved?: number;
 };
 
 /** One bounded unit of Autopilot work for a workspace. Safe to call again and again. */
@@ -671,10 +778,16 @@ export async function runStep(orgId: string, budget = 3, now = new Date()): Prom
 
 async function runStepLocked(orgId: string, budget: number, now: Date): Promise<StepResult> {
   const s = await getAutopilotSettings(orgId);
-  const w = planWindow(s, now);
+  const weekdaysOnly = (await getSettings(orgId)).weekdaysOnly !== false;
+  const w = planWindow(s, now, weekdaysOnly);
   const base: StepResult = { enabled: false, window: { label: w.label, days: w.days.length }, written: 0, remaining: 0, picturesFixed: 0, revised: 0, autoApproved: 0, scheduled: 0, submitted: 0, emailed: false, problems: [], errors: [] };
   if (!(await isEnabled(orgId, s))) return base;
   base.enabled = true;
+  if (weekdaysOnly) {
+    const wk = await clearWeekends(orgId, s, now.getTime());
+    base.weekendMoved = wk.moved;
+    base.weekendRemoved = wk.removed;
+  }
   const clients = await autopilotClients(orgId, s);
   await alignObjectives(orgId, clients.map((c) => c.id));
 
@@ -715,7 +828,7 @@ async function runStepLocked(orgId: string, budget: number, now: Date): Promise<
 /** What the Publishing page shows. */
 export async function status(orgId: string, now = new Date()) {
   const s = await getAutopilotSettings(orgId);
-  const w = planWindow(s, now);
+  const w = planWindow(s, now, (await getSettings(orgId)).weekdaysOnly !== false);
   const enabled = await isEnabled(orgId, s);
   const clients = await autopilotClients(orgId, s);
   const all = await prisma.client.findMany({
@@ -789,7 +902,8 @@ export async function fillGaps(orgId: string, clientId: string, days: string[], 
   try {
     const s = await getAutopilotSettings(orgId);
     // Re-check: a day is free only if NO post of this company is planned on it.
-    const wanted = Array.from(new Set(days.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)))).sort();
+    const weekdaysOnly = (await getSettings(orgId)).weekdaysOnly !== false;
+    const wanted = Array.from(new Set(days.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !(weekdaysOnly && isWeekendYmd(d))))).sort();
     if (!wanted.length) return out;
     const from = etInstant(wanted[0], "00:00");
     const to = new Date(etInstant(wanted[wanted.length - 1], "00:00").getTime() + DAY);
@@ -821,7 +935,7 @@ export async function fillGaps(orgId: string, clientId: string, days: string[], 
     if (!drafts.length) out.errors.push("The AI answer could not be read — try again.");
     for (let i = 0; i < drafts.length && i < chunk.length; i++) {
       const d = drafts[i];
-      const { text, textX } = finalTexts(d, xLimit);
+      const { text, textX } = await withCompanyTags(orgId, clientId, finalTexts(d, xLimit), platforms);
       const item = await prisma.contentItem.create({
         data: {
           organizationId: orgId, clientId, title: d.title || `${c.name} — ${chunk[i]}`, text, textX,

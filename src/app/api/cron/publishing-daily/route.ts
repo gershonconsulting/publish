@@ -8,7 +8,9 @@ export const runtime = "edge";
  *   3. (v0.14.0) PUB-213 to the team when a personal LinkedIn connection
  *      expires within 10 days / has expired — the team forwards the link.
  *   4. (v0.20.0) brings every company's connection history up to date.
- * POST, Bearer CRON_SECRET. ?force=1 resends today's team email.
+ *   5. (v0.21.0) on Mondays (New York), PUB-215 — weekly connections report to
+ *      report@gershonconsulting.com: companies lacking a direct LinkedIn/X connection.
+ * POST, Bearer CRON_SECRET. ?force=1 resends today's team email; ?connReport=1 sends PUB-215 now.
  * Triggered by .github/workflows/publishing-daily.yml.
  */
 import { NextRequest, NextResponse } from "next/server";
@@ -18,6 +20,7 @@ import prisma from "@/lib/db-raw";
 import { PUBLISHING_CLIENT_WHERE } from "@/lib/publishing";
 import { getLinked } from "@/lib/linked-accounts";
 import { syncConnLog } from "@/lib/conn-log";
+import { weeklyConnReport } from "@/lib/conn-report";
 
 /** v0.20.0: write expiries (nobody saves anything when a token runs out) into each company's connection history. */
 async function syncAllConnLogs(orgId: string): Promise<number> {
@@ -33,17 +36,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
   try {
-    const force = new URL(req.url).searchParams.get("force") === "1";
+    const qs = new URL(req.url).searchParams;
+    const force = qs.get("force") === "1";
+    const forceConn = qs.get("connReport") === "1";
     const out: Record<string, unknown> = {};
     for (const orgId of await orgsForInventory()) {
       const reminders = await remindReviewers(orgId);
       const digest = await teamDigest(orgId, Date.now(), force);
       const liExpiring = await remindLiExpiring(orgId).catch(() => []);
       const connLogs = await syncAllConnLogs(orgId).catch(() => 0);
+      const connReport = await weeklyConnReport(orgId, Date.now(), forceConn).catch((e) => ({ sent: false, skipped: e instanceof Error ? e.message : "failed" }));
       out[orgId] = {
         reminders,
         liExpiring,
         connLogs,
+        connReport,
         teamEmail: digest.sent,
         unchanged: !!digest.unchanged, // v0.7.5: same state as the last email sent → not resent
         warnings: digest.rows.filter((r) => r.level !== "ok").map((r) => ({ client: r.name, days: r.coverageDays, level: r.level })),

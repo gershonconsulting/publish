@@ -6,7 +6,8 @@ Last updated: 2026-11-19 (v0.23.0 Knowledge links)
 - ✅ "Fill empty sections" drafts missing parts with Intelligence (overwrite:false — never replaces written text); style/brand retried alone so their reason shows
 - ✅ Client link can be opened without the internal check: POST /api/knowledge-base/links {release:"all"|clientId}, POST …/<id>/validation {release:true}; state.releasedBy recorded; internal link keeps working
 - ✅ GET /api/knowledge-base/links; Validation tab shows "Still empty" + "Open the client link now"
-- ✅ No schema change (OrgSetting JSON); tsc clean, tests 124/124, next build OK
+- ✅ Brand from websites ignores WordPress/Bootstrap/test colours and icon fonts (FRAMEWORK_COLORS, isIconFont)
+- ✅ No schema change (OrgSetting JSON); tsc clean, tests 125/125, next build OK
 - ❌ Writing style needs the company's pre-takeover posts in social.gershon.ai; brand needs a readable website — companies without either stay incomplete until the client shares material
 
 ## v0.22.0 — semi-autopilot, working days only, @company tag (Olivier 2026-11-19)

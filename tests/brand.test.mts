@@ -72,3 +72,17 @@ test("validation gets a Brand section only when a brand is known", () => {
   assert.equal(s.at(-1)!.id, "brand");
   assert.equal(s.at(-1)!.kind, "brand");
 });
+
+test("v0.23.0 framework colours and icon fonts are not brand", () => {
+  assert.equal(b.isFrameworkColor("#007cba"), true);
+  assert.equal(b.isFrameworkColor("#EC6707"), false);
+  for (const f of ["FontAwesome5Brands", "entypo-fontello-enfold", "Material-Design-Iconic-Font", "Black Tie", "Icon7Stroke"]) assert.equal(b.isIconFont(f), true, f);
+  for (const f of ["Open Sans", "Poppins", "Playfair Display", "Fraunces"]) assert.equal(b.isIconFont(f), false, f);
+  const clean = b.withoutFrameworkNoise({ colors: [{ hex: "#007CBA", name: "x", role: "" }, { hex: "#EC6707", name: "Orange", role: "" }], fonts: "Open Sans, FontAwesome5Brands", logoUrl: "", notes: "", source: "ai", from: null, updatedAt: null });
+  assert.deepEqual(clean.colors.map((c) => c.hex), ["#EC6707"]);
+  assert.equal(clean.fonts, "Open Sans");
+  const css = "a{color:#007cba}.btn{background:#ec6707;color:#ec6707} body{font-family:'Open Sans',FontAwesome}";
+  const f = b.extractFromSite("<html></html>", [css], "https://x.com");
+  assert.deepEqual(f.colors.map((c) => c.hex), ["#EC6707"]);
+  assert.deepEqual(f.fonts, ["Open Sans"]);
+});

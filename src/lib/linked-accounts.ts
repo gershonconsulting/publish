@@ -25,6 +25,7 @@ import prisma from "@/lib/db-raw";
 import { openValue, sealValue } from "@/lib/x-session";
 import { SITE } from "@/lib/publishing";
 import { logLinkedChange } from "@/lib/conn-log";
+import { liCommentary as liText } from "@/lib/company-tag";
 
 export type LinkNet = "linkedin" | "x";
 export type LiAuthor = { urn: string; name: string; kind: "organization" | "person"; vanity: string | null; id: string };
@@ -399,14 +400,8 @@ export async function linkedinToken(c: LiConn): Promise<{ token: string; updated
 }
 
 /** LinkedIn "little text": reserved characters escaped, #words kept as hashtags. */
-export function liCommentary(text: string): string {
-  const esc = (s: string) => s.replace(/[\\|{}@\[\]()<>#*_~]/g, (m) => "\\" + m);
-  return text
-    .split(/(#[\p{L}\p{N}_]+)/u)
-    .map((part) => (/^#[\p{L}\p{N}_]+$/u.test(part) ? `{hashtag|\\#|${esc(part.slice(1))}}` : esc(part)))
-    .join("");
-}
-
+// v0.22.0: moved to lib/company-tag.ts (adds real @company mentions).
+export { liCommentary } from "@/lib/company-tag";
 async function liUploadImage(token: string, owner: string, bytes: Uint8Array<ArrayBuffer>, mime: string): Promise<string> {
   const r = await liFetch(token, "images?action=initializeUpload", {
     method: "POST",
@@ -421,12 +416,12 @@ async function liUploadImage(token: string, owner: string, bytes: Uint8Array<Arr
 }
 
 /** Publish one post. Returns its URL. `sent` tells whether LinkedIn may have created it (never retry then). */
-export async function linkedinPost(c: LiConn, token: string, text: string, picture: { bytes: Uint8Array<ArrayBuffer>; mime: string } | null): Promise<{ url: string; id: string }> {
+export async function linkedinPost(c: LiConn, token: string, text: string, picture: { bytes: Uint8Array<ArrayBuffer>; mime: string } | null, mentions: { name: string; urn: string }[] = []): Promise<{ url: string; id: string }> {
   if (!c.author) throw new Error("Pick which LinkedIn page to post as (Settings → Linked accounts).");
   const imageUrn = picture ? await liUploadImage(token, c.author, picture.bytes, picture.mime) : null;
   const body = {
     author: c.author,
-    commentary: liCommentary(text),
+    commentary: liText(text, mentions),
     visibility: "PUBLIC",
     distribution: { feedDistribution: "MAIN_FEED", targetEntities: [], thirdPartyDistributionChannels: [] },
     lifecycleState: "PUBLISHED",

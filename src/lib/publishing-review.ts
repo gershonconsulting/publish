@@ -9,7 +9,7 @@
 import prisma from "@/lib/db-raw";
 import type { ReviseResult } from "@/lib/publishing-revise";
 import {
-  addEvent, alertTeamBurst, burstSend, mediaCount, esc, getSettings, getTarget, notifyReadyForPublishing, quote, reviewToken, reviewUrl, sendMail, textProblems, validatorOf,
+  addEvent, alertTeamBurst, burstSend, mediaCount, withCompanyTags, esc, getSettings, getTarget, notifyReadyForPublishing, quote, reviewToken, reviewUrl, sendMail, textProblems, validatorOf,
 } from "@/lib/publishing";
 import { PUBLISH_MAILS, clientSubject, publishLink } from "@/lib/publishing-mail";
 import { markSent } from "@/lib/mail-burst";
@@ -33,7 +33,11 @@ export async function submitForReview(
   const problems = textProblems(item, await getSettings(orgId), await mediaCount(item.id));
   if (problems.length) return problems.join(" ");
 
-  await prisma.contentItem.update({ where: { id: item.id }, data: { status: "IN_REVIEW", submittedAt: new Date() } });
+  // v0.22.0: the company tag (@) is in the text the reviewer approves.
+  const tagged = await withCompanyTags(orgId, item.clientId, { text: item.text, textX: item.textX }, item.platforms).catch(() => null);
+  const tagData = tagged && (tagged.text !== item.text || tagged.textX !== item.textX) ? { text: tagged.text, textX: tagged.textX } : {};
+  if (tagged) Object.assign(item, tagData);
+  await prisma.contentItem.update({ where: { id: item.id }, data: { status: "IN_REVIEW", submittedAt: new Date(), ...tagData } });
   // The "submitted" event carries the batch name; the review page groups by it.
   await addEvent(orgId, item.id, item.version, "submitted", "team", by, opts.batch ? `batch:${opts.batch}` : null);
   if (opts.notify === false) return null;

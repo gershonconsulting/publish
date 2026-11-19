@@ -13,7 +13,7 @@ import { AlertTriangle, BookOpen, Bot, CheckCircle2, ExternalLink, Loader2, Play
 
 type Row = { clientId: string; name: string; clientType?: string; planned: number; days: number; inReview: number; approved: number; changes: number; accountsOk: boolean; networks: string[]; reviewUrl: string };
 type Status = {
-  settings: { enabled: boolean | null; clientIds: string[] | null; postTime: string; autoApproveHours: number; monthDay: number };
+  settings: { enabled: boolean | null; clientIds: string[] | null; postTime: string; autoApproveHours: number; monthDay: number; mode?: "semi" | "auto" };
   enabled: boolean;
   window: { label: string; first: string | null; last: string | null };
   clients: Row[];
@@ -108,10 +108,13 @@ export function AutopilotPage() {
         <div className="flex items-center gap-3">
           <Bot size={22} className={s.enabled ? "text-emerald-600" : "text-gray-400"} />
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Autopilot is {s.enabled ? "ON" : "OFF"}</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Autopilot is {s.enabled ? (s.settings.mode === "auto" ? "ON — full" : "ON — semi (team checks first)") : "OFF"}</h2>
             <p className="text-sm text-gray-600">
-              One post per day for each company you put on Autopilot (internal or campaign). On the {s.settings.monthDay}th, the whole next month is written (LinkedIn + X + picture) from each
-              company&apos;s <Link href="/knowledge-base" className="underline">Knowledge Base</Link> and sent to you in one email. Unanswered posts are approved after {s.settings.autoApproveHours}h and published at {s.settings.postTime} (New York).
+              One post per working day (Monday–Friday, never Saturday or Sunday) for each company you put on Autopilot. On the {s.settings.monthDay}th, the whole next month is written (LinkedIn + X + picture + company tag) from each
+              company&apos;s <Link href="/knowledge-base" className="underline">Knowledge Base</Link>.{" "}
+              {s.settings.mode === "auto"
+                ? <>It goes straight to each company&apos;s validator. Unanswered internal posts are approved after {s.settings.autoApproveHours}h and published at {s.settings.postTime} (New York).</>
+                : <>It waits in <Link href="/publishing" className="underline">Content &amp; review</Link> for the Gershon team: you get one email per company, check and edit the posts, then press <b>Send for review</b>. Nothing reaches a client before that.</>}
             </p>
           </div>
           <div className="ml-auto flex gap-2">
@@ -197,6 +200,12 @@ export function AutopilotPage() {
           <p className="text-[11px] text-gray-500">Tick a company to add it: its next month is written on the {s.settings.monthDay}th (or press Run now). Its LinkedIn/X go in <Link href="/publishing/accounts" className="underline">Publishing → Accounts</Link>.</p>
         </div>
         <div className="flex flex-wrap gap-6 text-sm">
+          <label>Mode{" "}
+            <select defaultValue={s.settings.mode || "semi"} onChange={(e) => save({ mode: e.target.value })} className="border border-gray-300 rounded px-2 py-1 ml-1">
+              <option value="semi">Semi — the team checks before the client</option>
+              <option value="auto">Full — straight to the validator</option>
+            </select>
+          </label>
           <label>Post time (New York){" "}
             <input type="time" defaultValue={s.settings.postTime} onBlur={(e) => e.target.value !== s.settings.postTime && save({ postTime: e.target.value })} className="border border-gray-300 rounded px-2 py-1 ml-1" />
           </label>

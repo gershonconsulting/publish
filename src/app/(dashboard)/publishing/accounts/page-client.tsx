@@ -63,6 +63,8 @@ type Row = {
   route: "workspace" | "client";
   client: { connectUrl: string; live: { overall: { level: string; label: string } }; lastSeenAt: string | null; version: string | null } | null;
   connections?: Conn[];
+  tagName?: string | null; tagLinkedin?: string | null; tagX?: string | null; tagOff?: boolean;
+  tag?: { name: string | null; linkedinUrn: string | null; xHandle: string | null; off: boolean } | null;
 };
 
 export function PublishingAccountsClient() {
@@ -209,7 +211,12 @@ function AccountRow({ r, canWrite, onSaved }: { r: Row; canWrite: boolean; onSav
   const [copied, setCopied] = useState(false);
   const [xKind, setXKind] = useState<"company" | "personal">(r.xKind || "company");
   const [dests, setDests] = useState<Dest[]>(r.destinations || []);
-  const dirty = li !== (r.linkedinUrl || "") || x !== (r.xHandle ? "@" + r.xHandle : "") || name !== (r.reviewerName || "") || email !== (r.reviewerEmail || "")
+  const [tName, setTName] = useState(r.tagName || "");
+  const [tLi, setTLi] = useState(r.tagLinkedin || "");
+  const [tX, setTX] = useState(r.tagX ? "@" + r.tagX : "");
+  const [tOff, setTOff] = useState(!!r.tagOff);
+  const tagDirty = tName !== (r.tagName || "") || tLi !== (r.tagLinkedin || "") || tX !== (r.tagX ? "@" + r.tagX : "") || tOff !== !!r.tagOff;
+  const dirty = tagDirty || li !== (r.linkedinUrl || "") || x !== (r.xHandle ? "@" + r.xHandle : "") || name !== (r.reviewerName || "") || email !== (r.reviewerEmail || "")
     || xKind !== (r.xKind || "company") || JSON.stringify(dests) !== JSON.stringify(r.destinations || []);
 
   async function call(method: "PUT" | "POST", body: Record<string, unknown>) {
@@ -223,6 +230,7 @@ function AccountRow({ r, canWrite, onSaved }: { r: Row; canWrite: boolean; onSav
       onSaved(n);
       setLi(n.linkedinUrl || ""); setX(n.xHandle ? "@" + n.xHandle : ""); setName(n.reviewerName || ""); setEmail(n.reviewerEmail || "");
       setXKind(n.xKind || "company"); setDests(n.destinations || []);
+      setTName(n.tagName || ""); setTLi(n.tagLinkedin || ""); setTX(n.tagX ? "@" + n.tagX : ""); setTOff(!!n.tagOff);
       setMsg(method === "POST" ? "New link created — the old one no longer works." : "Saved.");
     } catch (e) { setMsg(e instanceof Error ? e.message : "Could not save."); }
     setBusy(false);
@@ -275,9 +283,26 @@ function AccountRow({ r, canWrite, onSaved }: { r: Row; canWrite: boolean; onSav
           <input disabled={!canWrite} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@client.com" className={input} /></label>
       </div>
       <Destinations dests={dests} setDests={setDests} canWrite={canWrite} input={input} />
+      <div className="mt-3 rounded-lg border border-gray-200 p-3">
+        <div className="text-[12px] font-semibold text-gray-800 mb-1">Company tag (@) on every post</div>
+        <p className="text-[11px] text-gray-600 mb-2">
+          {r.tag?.off ? "Not tagged." : <>Posts are tagged <b>@{r.tag?.name || r.name}</b> on LinkedIn{r.tag?.xHandle ? <> and <b>@{r.tag.xHandle}</b> on X</> : " (no X handle to tag)"} — except on the company&apos;s own page / X account.
+          {" "}{r.tag?.linkedinUrn ? "LinkedIn: real mention through the direct connection ✅" : "LinkedIn: plain text until the page number is set below ❌"}</>}
+        </p>
+        <div className="grid md:grid-cols-4 gap-2">
+          <label className="block"><span className="text-[11px] text-gray-600">Name as on its LinkedIn page</span>
+            <input disabled={!canWrite} value={tName} onChange={(e) => setTName(e.target.value)} placeholder={r.name} className={input} /></label>
+          <label className="block"><span className="text-[11px] text-gray-600">LinkedIn page number or linkedin.com/company/123…</span>
+            <input disabled={!canWrite} value={tLi} onChange={(e) => setTLi(e.target.value)} placeholder={r.tag?.linkedinUrn || "e.g. 1234567"} className={input} /></label>
+          <label className="block"><span className="text-[11px] text-gray-600">X handle to tag</span>
+            <input disabled={!canWrite} value={tX} onChange={(e) => setTX(e.target.value)} placeholder={r.tag?.xHandle ? "@" + r.tag.xHandle : "@company"} className={input} /></label>
+          <label className="flex items-center gap-2 text-[12px] text-gray-700 mt-4">
+            <input type="checkbox" disabled={!canWrite} checked={tOff} onChange={(e) => setTOff(e.target.checked)} /> Do not tag this company</label>
+        </div>
+      </div>
       <div className="flex flex-wrap items-center gap-2 mt-3 text-xs">
         {canWrite && dirty && (
-          <button disabled={busy} onClick={() => call("PUT", { linkedinUrl: li, xHandle: x, reviewerName: name, reviewerEmail: email, xKind, destinations: dests })} className="inline-flex items-center gap-1 px-3 py-1.5 font-medium text-white bg-gray-900 rounded-lg disabled:opacity-50">
+          <button disabled={busy} onClick={() => call("PUT", { linkedinUrl: li, xHandle: x, reviewerName: name, reviewerEmail: email, xKind, destinations: dests, tagName: tName, tagLinkedin: tLi, tagX: tX, tagOff: tOff })} className="inline-flex items-center gap-1 px-3 py-1.5 font-medium text-white bg-gray-900 rounded-lg disabled:opacity-50">
             <Check size={12} /> Save
           </button>
         )}

@@ -19,6 +19,7 @@ import {
   getLinked, saveLinked, linkedinPost, linkedinToken, liMatches, xMatches, xPost, xTokenFresh, type Linked,
 } from "@/lib/linked-accounts";
 import { stripLinks } from "@/lib/x-links";
+import { resolveTag } from "@/lib/publishing";
 
 function unb64(s: string): Uint8Array<ArrayBuffer> {
   const bin = atob(s);
@@ -85,7 +86,10 @@ export async function apiPublishDue(orgId: string): Promise<{ posted: number; fa
       if (net === "LINKEDIN") {
         const { token, updated } = await linkedinToken(l.linkedin!);
         if (updated) { l.linkedin = updated; await saveLinked(orgId, d.clientId!, l); }
-        res = await linkedinPost(l.linkedin!, token, d.text, pic);
+        // v0.22.0: "@Company" in the text becomes a real LinkedIn mention when its page id is known.
+        const tag = d.clientId ? await resolveTag(orgId, d.clientId).catch(() => null) : null;
+        const mentions = tag && !tag.off && tag.name && tag.linkedinUrn ? [{ name: tag.name, urn: tag.linkedinUrn }] : [];
+        res = await linkedinPost(l.linkedin!, token, d.text, pic, mentions);
       } else {
         const { token, updated } = await xTokenFresh(l.x!);
         if (updated) { l.x = updated; await saveLinked(orgId, d.clientId!, l); }

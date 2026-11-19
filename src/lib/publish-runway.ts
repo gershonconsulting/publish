@@ -53,7 +53,8 @@ export function monthEnds(ds: string): { endThis: string; endNext: string } {
 
 /** Which weekdays carry a post for a posts-per-week objective. */
 export function slotWeekdays(perWeek: number): number[] {
-  const p = Math.max(1, Math.min(7, Math.round(perWeek)));
+  // v0.22.0 (Olivier, 2026-11-19): working days only — 6 or 7 a week still means Monday–Friday.
+  const p = Math.max(1, Math.min(5, Math.round(perWeek)));
   const map: Record<number, number[]> = {
     1: [3],
     2: [2, 4],

@@ -34,6 +34,8 @@ import { digestDue, digestHtml, digestIdempotencyKey, digestSubject, lastDigestD
 import type { ClientType } from "@prisma/client";
 import prisma from "@/lib/db-raw";
 import { siteUrl } from "@/lib/site";
+import { parseLinkedInOrg, withLinkedInTag, withXTag, type CompanyTag } from "@/lib/company-tag";
+import { toWorkday } from "@/lib/work-days";
 import { withAuditBcc } from "@/lib/mail-bcc";
 import { sendResend } from "@/lib/resend-send";
 import { flushHeld, hold, markSent, shouldHold, shouldHoldOnArrival } from "@/lib/mail-burst";
@@ -73,9 +75,11 @@ export type PublishSettings = {
   requireImage: boolean;
   /** Who is told content is validated and ready for publishing (Olivier, 2026-10-18). */
   readyEmail: string;
+  /** v0.22.0 (Olivier, 2026-11-19): no posts on Saturday or Sunday (New York). Default on. */
+  weekdaysOnly?: boolean;
 };
 export const READY_EMAIL_DEFAULT = "social@gershonconsulting.com";
-export const DEFAULT_SETTINGS: PublishSettings = { enabled: true, longPostsX: false, graceMinutes: 120, alertEmail: null, requireImage: true, readyEmail: READY_EMAIL_DEFAULT };
+export const DEFAULT_SETTINGS: PublishSettings = { enabled: true, longPostsX: false, graceMinutes: 120, alertEmail: null, requireImage: true, readyEmail: READY_EMAIL_DEFAULT, weekdaysOnly: true };
 
 // ── Pictures ─────────────────────────────────────────────────────────────────────────────
 
@@ -321,6 +325,16 @@ export type Target = {
   xKind?: "company" | "personal";
   /** More places to post (v4.53.0). */
   destinations?: Destination[];
+  /**
+   * v0.22.0 — the company tagged (@) on every post. Name as on its LinkedIn
+   * page (default: the company name), its LinkedIn organization id/URL
+   * (needed for a real mention through the API) and its X handle.
+   */
+  tagName?: string | null;
+  tagLinkedin?: string | null;
+  tagX?: string | null;
+  /** true = do not tag this company. */
+  tagOff?: boolean;
 };
 
 export function normalizeHandle(h: string | null | undefined): string | null {
@@ -376,9 +390,68 @@ export async function saveTarget(orgId: string, clientId: string, t: Partial<Tar
       t.reviewerEmail !== undefined ? (t.reviewerEmail || "").trim() || null : cur.reviewerEmail,
     xKind: t.xKind !== undefined ? (t.xKind === "personal" ? "personal" : "company") : cur.xKind,
     destinations: t.destinations !== undefined ? cleanDestinations(t.destinations) : cleanDestinations(cur.destinations),
+    tagName: t.tagName !== undefined ? (t.tagName || "").trim().replace(/^@/, "").slice(0, 100) || null : cur.tagName ?? null,
+    tagLinkedin: t.tagLinkedin !== undefined ? parseLinkedInOrg(t.tagLinkedin) : cur.tagLinkedin ?? null,
+    tagX: t.tagX !== undefined ? normalizeHandle(t.tagX) : cur.tagX ?? null,
+    tagOff: t.tagOff !== undefined ? !!t.tagOff : !!cur.tagOff,
   };
   await writeSetting(orgId, targetKey(clientId), JSON.stringify(next));
   return getTarget(orgId, clientId);
+}
+
+// ── v0.22.0: @company on every post ─────────────────────────────────────────
+
+/** Who to tag for a company: its saved tag, else its own name / page id / company X account. */
+export async function resolveTag(orgId: string, clientId: string): Promise<CompanyTag & { off: boolean }> {
+  const t = await getTarget(orgId, clientId);
+  const c = await prisma.client.findFirst({ where: { id: clientId }, select: { name: true } });
+  let urn = parseLinkedInOrg(t.tagLinkedin) || parseLinkedInOrg(t.linkedinUrl);
+  if (!urn) {
+    for (const d of t.destinations || []) if (d.network === "LINKEDIN" && (urn = parseLinkedInOrg(d.target))) break;
+  }
+  if (!urn) {
+    // A company page connected for posting knows its organization id.
+    try {
+      const { getLinked } = await import("@/lib/linked-accounts");
+      const li = (await getLinked(orgId, clientId)).linkedin;
+      if (li && !li.personal && li.author?.startsWith("urn:li:organization:")) urn = li.author;
+    } catch { /* no id: plain-text tag */ }
+  }
+  const x = t.tagX || (t.xHandle && t.xKind !== "personal" ? t.xHandle : null);
+  return { name: (t.tagName || c?.name || "").trim() || null, linkedinUrn: urn, xHandle: x, off: !!t.tagOff };
+}
+
+/**
+ * The text for one destination with the company tag added. Never on the
+ * company's own LinkedIn page or its own X account (a company does not tag itself).
+ */
+export function tagFor(text: string, net: Net, dest: { kind: DestKind; target: string } | null, tag: CompanyTag & { off: boolean }, xLimit: number): string {
+  if (tag.off) return text;
+  if (net === "LINKEDIN") {
+    if (dest && dest.kind === "page") return text;
+    return withLinkedInTag(text, tag.name, LINKEDIN_MAX);
+  }
+  if (!tag.xHandle || (dest && dest.target.toLowerCase() === tag.xHandle.toLowerCase())) return text;
+  return withXTag(text, tag.xHandle, xLimit, xLength);
+}
+
+/** Both texts of a post with the tag, for the networks/destinations this company posts to. */
+export async function withCompanyTags(orgId: string, clientId: string, texts: { text: string; textX: string | null }, platforms: string): Promise<{ text: string; textX: string | null }> {
+  const tag = await resolveTag(orgId, clientId);
+  if (tag.off) return texts;
+  const nets = parsePlatforms(platforms);
+  const dests = destinationsOf(await getTarget(orgId, clientId));
+  const xLimit = xMax(await getSettings(orgId));
+  let { text, textX } = texts;
+  const li = dests.filter((d) => d.network === "LINKEDIN");
+  if (nets.includes("LINKEDIN") && li.some((d) => d.kind !== "page")) text = tagFor(text, "LINKEDIN", li.find((d) => d.kind !== "page")!, tag, xLimit);
+  const xs = dests.filter((d) => d.network === "TWITTER");
+  if (nets.includes("TWITTER") && xs.length) {
+    const d = xs.find((x) => x.target.toLowerCase() !== (tag.xHandle || "").toLowerCase());
+    // No X version yet: the LinkedIn text is used on X and is tagged when it goes out.
+    if (d && textX?.trim()) textX = tagFor(textX, "TWITTER", d, tag, xLimit);
+  }
+  return { text, textX };
 }
 
 function mintToken(): string {
@@ -574,6 +647,18 @@ export async function scheduleItem(orgId: string, itemId: string, when: Date): P
   }
   if (problems.length) return problems;
 
+  // v0.22.0: working days only — a Saturday/Sunday post moves to Monday, same time.
+  if (settings.weekdaysOnly !== false) {
+    const moved = toWorkday(when);
+    if (moved.getTime() !== when.getTime()) {
+      await addEvent(orgId, item.id, item.version, "comment", "team", "Publishing", "Moved from the weekend to the next working day (no Saturday or Sunday posts).");
+      when = moved;
+    }
+  }
+  // v0.22.0: the company is tagged (@) on every post, except on its own page / X account.
+  const tag = item.clientId ? await resolveTag(orgId, item.clientId) : null;
+  const xLimit = xMax(settings);
+
   // Replace whatever has not gone out yet; keep what already went out.
   // One delivery per destination (v4.53.0): e.g. the company page AND the group.
   const existing = await prisma.scheduledPost.findMany({ where: { contentId: item.id } });
@@ -590,7 +675,7 @@ export async function scheduleItem(orgId: string, itemId: string, when: Date): P
         clientId: item.clientId,
         platform: net,
         target: dest.target,
-        text: textFor(item, net),
+        text: tag ? tagFor(textFor(item, net), net, dest, tag, xLimit) : textFor(item, net),
         mediaJson,
         status: "SCHEDULED",
         scheduledAt: when,

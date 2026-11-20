@@ -1,5 +1,14 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-19 (v0.23.0 Knowledge links)
+Last updated: 2026-11-20 (v0.23.1 monthly client email once per client per month — HOLD, client-facing)
+
+## v0.23.1 — monthly client email ONCE per client per month (nightly 2026-11-20, HOLD: client-facing)
+- Resend: arouleau@altavia.co got 4 emails "Gershon Consulting Publish - Altavia (Alexandre) - November 2026":
+  11-17 19:53Z PUB-103 (month, 10 posts) · 11-18 18:01Z PUB-105 (new v4) · 18:24Z PUB-101 (same v4 again) · 19:23Z PUB-103 AGAIN
+- ✅ Cause 1: autopilot submitMonth() had no "sent" marker + random Idempotency-Key → every step that found new month drafts re-sent PUB-103
+- ✅ Fix: org_settings `monthly_sent:<YYYY-MM>:<clientId>` claimed atomically before sending (released on failure) + Resend Idempotency-Key `publish-monthly-<clientId>-<YYYY-MM>` (lib/monthly-once.ts, monthly-once-db.ts)
+- ✅ Cause 2: a version already announced by PUB-105 was announced again by PUB-101 → marker `client_announced:<item>@<version>#<pictures>`; a new picture still notifies
+- ✅ tests 135/135 (monthly-once 10/10 reproduces the 2x PUB-103), tsc clean, next build OK; no schema change
+- ❌ Not merged / not deployed — on Olivier's OK list. Posts Autopilot adds to an already-announced month are on the same review page, no second month email
 
 ## v0.23.0 — Knowledge links for every client (Olivier 2026-11-19: "Complete the knowledge Base for everyone… share a dedicated link to all clients so they can validate")
 - ✅ Workspace → Knowledge links (/knowledge-links): one line per company — empty sections, client progress, client link (copy/open), "Copy all client links"

@@ -9,6 +9,8 @@ import { publishingCaller } from "@/lib/publishing-auth";
 import { addEvent, esc, getTarget, quote, reviewToken, reviewUrl, sendMail } from "@/lib/publishing";
 import { reviseFromComment, type ReviseResult } from "@/lib/publishing-revise";
 import { clientSubject } from "@/lib/publishing-mail";
+import { mailIdempotencyKey } from "@/lib/mail-dedupe";
+import { claimAnnouncement, releaseAnnouncement } from "@/lib/monthly-once-db";
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const c = await publishingCaller(true);
@@ -29,13 +31,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       const company = await prisma.client.findFirst({ where: { id: item.clientId }, select: { name: true } });
       const subject = clientSubject(company?.name, t.reviewerName, item.scheduledAt);
       if (revised?.revised) {
-        await sendMail(
-          t.reviewerEmail,
-          subject,
-          `<p><b>${esc(c.name || "Your copywriter")}</b> wrote:</p>${quote(body)}<p>Here is the new version, ready for your review:</p>${quote(revised.text)}`,
-          { href, label: "Review the new version" },
-          "NEW_VERSION",
-        );
+        // v0.23.1: this version is now in the client's inbox — a later "Send for review"
+        // of the same version does not email them again as PUB-101 (Altavia 2026-11-18).
+        if (await claimAnnouncement(c.orgId, item.id, revised.version, "PUB-105")) {
+          const ok = await sendMail(
+            t.reviewerEmail,
+            subject,
+            `<p><b>${esc(c.name || "Your copywriter")}</b> wrote:</p>${quote(body)}<p>Here is the new version, ready for your review:</p>${quote(revised.text)}`,
+            { href, label: "Review the new version" },
+            "NEW_VERSION",
+            undefined,
+            { idempotencyKey: mailIdempotencyKey("PUB-105", Date.now(), [c.orgId, item.id, revised.version, t.reviewerEmail]) },
+          );
+          if (!ok) await releaseAnnouncement(c.orgId, item.id, revised.version);
+        }
       } else {
         await sendMail(
           t.reviewerEmail,

@@ -1,6 +1,7 @@
 export const runtime = 'edge';
 import type { Metadata } from "next";
 import "./globals.css";
+import { PW_EYE_JS } from "../lib/pw-eye";
 import { Providers } from "@/components/providers";
 import { PRODUCT_NAME, PRODUCT_DESCRIPTION } from "@/lib/product";
 
@@ -19,6 +20,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="font-sans antialiased">
         <Providers>{children}</Providers>
+        <script dangerouslySetInnerHTML={{ __html: PW_EYE_JS }} />
       </body>
     </html>
   );

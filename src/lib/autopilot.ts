@@ -44,6 +44,8 @@ import { clean, fitTo } from "@/lib/x-fit";
 import { stripLinks } from "@/lib/x-links";
 import { firstFreeWorkday, isWeekendYmd } from "@/lib/work-days";
 import { withCompanyTags } from "@/lib/publishing";
+import { sendOncePerMonth } from "@/lib/monthly-once";
+import { dbOnceStore } from "@/lib/monthly-once-db";
 import { brandPaletteFor, competitiveSnapshot, draftKB, getKB, kbForPrompt, snapshotForPrompt, type KnowledgeBase } from "@/lib/knowledge-base";
 
 export const AUTOPILOT = "Autopilot";
@@ -53,7 +55,7 @@ const SETTINGS_KEY = "autopilot_settings";
 const TEXT_MODEL_HINT = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const IMAGE_MODELS = ["@cf/black-forest-labs/flux-1-schnell", "@cf/bytedance/stable-diffusion-xl-lightning"];
 
-// ── Settings ─────────────────────────────────────────────────────────────────
+// ── Settings ─────────────────────────────────────────────────────────────────────────────
 
 export type AutopilotSettings = {
   /** null = not decided yet → ON when the workspace has a Gershon INTERNAL company. */
@@ -140,7 +142,7 @@ export async function autopilotOrgs(): Promise<string[]> {
   return out;
 }
 
-// ── New York dates ───────────────────────────────────────────────────────────
+// ── New York dates ───────────────────────────────────────────────────────────────────────
 
 const ymdFmt = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
 export function etYmd(d: Date): string {
@@ -196,7 +198,7 @@ export function planWindow(s: AutopilotSettings, now = new Date(), weekdaysOnly 
   };
 }
 
-// ── Writing ──────────────────────────────────────────────────────────────────
+// ── Writing ─────────────────────────────────────────────────────────────────────────────
 
 /** What each weekday's post is, so a month does not read like one post 30 times. */
 const DAY_ANGLE = [
@@ -320,7 +322,7 @@ async function writePosts(
   return [];
 }
 
-// ── Pictures ─────────────────────────────────────────────────────────────────
+// ── Pictures ────────────────────────────────────────────────────────────────────────────
 
 function toB64(bytes: Uint8Array): string {
   let s = "";
@@ -382,7 +384,7 @@ async function attachPicture(orgId: string, contentId: string, idea: string): Pr
   return true;
 }
 
-// ── The steps ────────────────────────────────────────────────────────────────
+// ── The steps ───────────────────────────────────────────────────────────────────────────
 
 function finalTexts(d: Draft, xLimit: number): { text: string; textX: string } {
   const text = Array.from(d.linkedin).slice(0, LINKEDIN_MAX).join("");
@@ -507,7 +509,11 @@ async function teamCheck(orgId: string, s: AutopilotSettings, w: PlanWindow): Pr
   return { submitted: 0, emailed };
 }
 
-/** All of the window written → send everything for review, ONE email. Once per month. */
+/**
+ * All of the window written → send everything for review, ONE email. Once per month
+ * per client — enforced since v0.23.1 by lib/monthly-once.ts (before, every step that
+ * found new Autopilot drafts in the month sent PUB-103 again).
+ */
 async function submitMonth(orgId: string, s: AutopilotSettings, w: PlanWindow): Promise<{ submitted: number; emailed: boolean }> {
   if (s.mode !== "auto") return teamCheck(orgId, s, w);
   const drafts = await prisma.contentItem.findMany({
@@ -545,7 +551,10 @@ async function submitMonth(orgId: string, s: AutopilotSettings, w: PlanWindow): 
       .slice(0, 31)
       .map((i) => `<li style="margin:3px 0"><span style="color:#666">${esc(i.scheduledAt ? i.scheduledAt.toLocaleDateString("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric" }) : "")}</span> — ${esc((i.title || i.text).split("\n")[0].slice(0, 110))}</li>`)
       .join("");
-    const ok = await sendMail(
+    // v0.23.1: ONE PUB-103 per client per month (Resend 2026-11-17/18: Altavia got it twice).
+    // Durable marker monthly_sent:<YYYY-MM>:<client> + Idempotency-Key publish-monthly-<client>-<YYYY-MM>.
+    // Posts Autopilot adds to the month later are on the same review page; no new month email.
+    const once = await sendOncePerMonth(dbOnceStore(orgId), clientId, w.monthKey, (idempotencyKey) => sendMail(
       v.email,
       clientSubject(c.name, v.isTeam ? null : v.name, w.label),
       `<p>${hi}</p>
@@ -557,8 +566,10 @@ async function submitMonth(orgId: string, s: AutopilotSettings, w: PlanWindow): 
       { href: link, label: "Validate the content" },
       "AUTOPILOT_MONTH",
       v.isTeam ? "internal" : "client",
-    );
-    emailed = emailed || ok;
+      { idempotencyKey },
+    ));
+    if (once === "already_sent") console.warn(`[autopilot] PUB-103 ${c.name} ${w.monthKey}: already sent this month — not sent again`);
+    emailed = emailed || once === "sent";
   }
   return { submitted, emailed };
 }

@@ -14,6 +14,7 @@ import {
 import { PUBLISH_MAILS, clientSubject, publishLink } from "@/lib/publishing-mail";
 import { markSent } from "@/lib/mail-burst";
 import { mailIdempotencyKey, sortedIds } from "@/lib/mail-dedupe";
+import { claimAnnouncement, releaseAnnouncement } from "@/lib/monthly-once-db";
 
 /** Default batch name, CloudCampaign-style: "<Company> — <Month YYYY>". */
 export function batchName(client: string, when = new Date()): string {
@@ -45,12 +46,14 @@ export async function submitForReview(
   const v = await validatorOf(orgId, item.clientId);
   const target = { reviewerEmail: v.email, reviewerName: v.name };
   const token = await reviewToken(orgId, item.clientId);
-  if (target.reviewerEmail) {
+  // v0.23.1: a version the client was already told about (PUB-105 / an earlier PUB-101)
+  // is not announced again (Altavia 2026-11-18: PUB-105 18:01Z then PUB-101 v4 18:24Z).
+  if (target.reviewerEmail && (await claimAnnouncement(orgId, item.id, item.version, "PUB-101"))) {
     const client = await prisma.client.findFirst({ where: { id: item.clientId }, select: { name: true } });
     const hi = target.reviewerName ? `Hi ${esc(target.reviewerName.split(/\s+/)[0])},` : "Hello,";
     const subject = clientSubject(client?.name, v.isTeam ? null : target.reviewerName, item.scheduledAt);
     // v0.18.2: one key per post version; posts sent one by one within 10 minutes are grouped.
-    await burstSend(orgId, item.clientId, "REVIEW_ONE", target.reviewerEmail, {
+    const queued = await burstSend(orgId, item.clientId, "REVIEW_ONE", target.reviewerEmail, {
       subject,
       subjectMany: subject,
       intro: `<p>${hi}</p>`,
@@ -59,6 +62,7 @@ export async function submitForReview(
       cta: { href: reviewUrl(token), label: "Review the post" },
       audience: v.isTeam ? "internal" : "client",
     }, [item.id, item.version]);
+    if (!queued) await releaseAnnouncement(orgId, item.id, item.version);
   }
   return null;
 }

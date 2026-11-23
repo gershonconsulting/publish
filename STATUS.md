@@ -1,5 +1,11 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-20 (v0.23.1 monthly client email once per client per month — HOLD, client-facing)
+Last updated: 2026-11-23 (v0.23.2 client emails show the posts + new subject)
+
+## v0.23.2 — client review emails show the posts; new subject (Olivier 2026-11-23)
+- ✅ "No content in the email!": PUB-102 (batch) and PUB-103 (Autopilot month) listed only titles like "10-12" → now each post's day (New York) + full text (lib/publishing-mail postsDigestHtml)
+- ✅ Subject = "Publish by Gershon.AI - <Company (First name)> - <Month YYYY>" (was "Gershon Consulting Publish …")
+- ✅ tests 138/138, tsc clean, next build OK; no schema change
+- ❌ social repo has an identical publishing-mail.ts (old subject) — align it next time Social is touched
 
 ## v0.23.1 — monthly client email ONCE per client per month (nightly 2026-11-20, HOLD: client-facing)
 - Resend: arouleau@altavia.co got 4 emails "Gershon Consulting Publish - Altavia (Alexandre) - November 2026":

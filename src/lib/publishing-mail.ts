@@ -14,8 +14,8 @@
  *   - Subject:  internal emails start with their number, e.g. "[PUB-201] Content inventory: …"
  *               PUB = the Publish platform; 1xx = client emails, 2xx = internal.
  *               v0.16.1: emails to the client carry no number in the subject — always
- *               "Gershon Consulting Publish - <Company (First name)> - <Month YYYY>"
- *               (clientSubject); the number stays in the body header/footer.
+ *               "Publish by Gershon.AI - <Company (First name)> - <Month YYYY>"
+ *               (clientSubject; was "Gershon Consulting Publish …" until v0.23.2); the number stays in the body header/footer.
  *   - Body:     a header line and a footer naming publish.gershon.ai, the
  *               number and the audience, plus a direct link into the platform.
  *   - Links:    always https://publish.gershon.ai (never social.gershon.ai),
@@ -95,8 +95,12 @@ export function publishFrom(audience: MailAudience): string {
   return `"${name}" <${address}>`;
 }
 
+/** Olivier, 2026-11-23: subject now starts "Publish by Gershon.AI" (was "Gershon Consulting Publish"). */
+export const CLIENT_SUBJECT_PREFIX = "Publish by Gershon.AI";
+
 /**
  * Subject of every email that goes to a client's validator (PUB-1xx), v0.16.1.
+ * v0.23.2: prefix changed to "Publish by Gershon.AI - <Company (First name)> - <Month YYYY>".
  * Olivier, 2026-11-10: "It should always be: Gershon Consulting Publish -
  * ClientCompanyName - Month to post", e.g.
  *   "Gershon Consulting Publish - Altavia (Alexandre) - November 2026".
@@ -111,7 +115,30 @@ export function clientSubject(company: string | null | undefined, reviewerName: 
   const month = typeof when === "string" && when.trim()
     ? when.trim()
     : (when instanceof Date && !isNaN(when.getTime()) ? when : new Date()).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "America/New_York" });
-  return `Gershon Consulting Publish - ${who} - ${month}`;
+  return `${CLIENT_SUBJECT_PREFIX} - ${who} - ${month}`;
+}
+
+/**
+ * v0.23.2 — the posts themselves, in the client email (Olivier, 2026-11-23:
+ * "No content in the email!" — PUB-102 only listed "10-12, 11-12…").
+ * One block per post: the day it goes out (New York) and the full text.
+ */
+export type DigestPost = { title?: string | null; text: string; scheduledAt?: Date | null };
+
+export function postsDigestHtml(posts: DigestPost[], maxChars = 1500): string {
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
+  return posts
+    .map((p, i) => {
+      const day = p.scheduledAt && !isNaN(p.scheduledAt.getTime())
+        ? p.scheduledAt.toLocaleDateString("en-US", { timeZone: "America/New_York", weekday: "long", month: "long", day: "numeric" })
+        : (p.title || "").trim() || `Post ${i + 1}`;
+      const raw = (p.text || "").trim();
+      const body = raw.length > maxChars ? `${raw.slice(0, maxChars).trimEnd()}…` : raw;
+      return `<div style="margin:14px 0;padding:12px 14px;border:1px solid #eee;border-left:3px solid #FE1B04;border-radius:6px">
+        <div style="font-size:13px;font-weight:bold;color:#d11200;margin-bottom:6px">${i + 1}. ${esc(day)}</div>
+        <div style="white-space:pre-wrap;color:#222">${esc(body) || "<i>(no text)</i>"}</div></div>`;
+    })
+    .join("");
 }
 
 export function numberedSubject(mail: PubMail, subject: string): string {

@@ -11,7 +11,7 @@ import type { ReviseResult } from "@/lib/publishing-revise";
 import {
   addEvent, alertTeamBurst, burstSend, mediaCount, withCompanyTags, esc, getSettings, getTarget, notifyReadyForPublishing, quote, reviewToken, reviewUrl, sendMail, textProblems, validatorOf,
 } from "@/lib/publishing";
-import { PUBLISH_MAILS, clientSubject, publishLink } from "@/lib/publishing-mail";
+import { PUBLISH_MAILS, clientSubject, postsDigestHtml, publishLink } from "@/lib/publishing-mail";
 import { markSent } from "@/lib/mail-burst";
 import { mailIdempotencyKey, sortedIds } from "@/lib/mail-dedupe";
 import { claimAnnouncement, releaseAnnouncement } from "@/lib/monthly-once-db";
@@ -109,14 +109,12 @@ export async function submitBatch(
     if (target.reviewerEmail) {
       const token = await reviewToken(orgId, clientId);
       const hi = target.reviewerName ? `Hi ${esc(target.reviewerName.split(/\s+/)[0])},` : "Hello,";
-      const list = items
-        .filter((i) => sent.includes(i.id))
-        .map((i) => `<li style="margin:4px 0">${esc((i.title || i.text).split("\n")[0].slice(0, 120))}</li>`)
-        .join("");
+      // v0.23.2: the posts' full text, not just their titles (Olivier 2026-11-23).
+      const list = postsDigestHtml(items.filter((i) => sent.includes(i.id)));
       emailed = await sendMail(
         target.reviewerEmail,
         clientSubject(client?.name, v.isTeam ? null : target.reviewerName, firstPlanned ?? new Date()),
-        `<p>${hi}</p><p><b>${esc(batch)}</b> is ready for your review — ${sent.length} post${sent.length === 1 ? "" : "s"}:</p><ul>${list}</ul>
+        `<p>${hi}</p><p><b>${esc(batch)}</b> is ready for your review — ${sent.length} post${sent.length === 1 ? "" : "s"}:</p>${list}
          <p>Approve them one by one or all at once, comment, or ask for changes. Nothing is published before you approve.</p>`,
         // v0.25.1: the link opens on THIS batch only (Amphasys 2026-11-24 opened on an old October batch).
         { href: focusedReviewUrl(reviewUrl(token), { batch }), label: "Review the content" },

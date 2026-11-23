@@ -1,5 +1,11 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-24 (v0.25.1 review link opens on the emailed posts)
+Last updated: 2026-11-25 (v0.25.2 client emails show the posts + subject "Publish by Gershon.AI")
+
+## v0.25.2 (was PR #40 v0.23.2) — client review emails show the posts; new subject (Olivier 2026-11-23)
+- ✅ "No content in the email!": PUB-102 (batch) and PUB-103 (Autopilot month) listed only titles like "10-12" → now each post's day (New York) + full text (lib/publishing-mail postsDigestHtml)
+- ✅ Subject = "Publish by Gershon.AI - <Company (First name)> - <Month YYYY>" (was "Gershon Consulting Publish …")
+- ✅ tests 138/138, tsc clean, next build OK; no schema change
+- ❌ social repo has an identical publishing-mail.ts (old subject) — align it next time Social is touched
 
 ## v0.25.1 — review link = the posts of the email (Olivier 2026-11-24, Amphasys PUB-102 December: "Les posts affichés … ne correspondent pas aux posts sélectionnés pour review")
 - ✅ Cause: /review/<token> listed every post of the company (60 for Amphasys) with the old "October 2026" batch (26 posts, still IN_REVIEW) on top; "Approve all" approved all 38 waiting posts

@@ -24,12 +24,11 @@ export const FEATURES: Feature[] = [
     note: "LinkedIn page number + X handle still to set" },
 
   // 🟠 pending validation
-  { id: "client-email-posts", title: "Client review emails show the posts + subject \"Publish by Gershon.AI - <Company> - <Month>\"", version: "0.23.2", state: "validation", since: "2026-11-23",
-    note: "PR #40 — changes what clients receive, waits for Olivier's OK" },
   { id: "company-tag-browser", title: "Real @company tag when posting through the Chrome extension", version: "0.24.0", state: "validation", since: "2026-11-24",
     note: "Live since build 55; extension 0.3.0 on Olivier's computer, then check the first live post" },
 
   // 🟢 done (live)
+  { id: "client-email-posts", title: "Client review emails show the posts + subject \"Publish by Gershon.AI - <Company> - <Month>\"", version: "0.25.2", state: "done", since: "2026-11-24" },
   { id: "review-link-focus", title: "Review link opens on the posts of the email (batch or post); \"Approve all\" approves only those", version: "0.25.1", state: "done", since: "2026-11-24" },
   { id: "feature-status-email", title: "Weekly feature-status email to social@ (this email)", version: "0.25.0", state: "done", since: "2026-11-24" },
   { id: "no-weekends", title: "No weekend publishing for any client", version: "0.24.1", state: "done", since: "2026-11-24" },

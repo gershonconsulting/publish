@@ -1,5 +1,11 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-24 (v0.24.1 no weekend publishing for any client)
+Last updated: 2026-11-24 (v0.25.0 weekly feature-status email)
+
+## v0.25.0 — weekly feature status PUB-217 (Olivier 2026-11-24: "Send the status of all features to social@ … Red started, Orange pending validation, Green done weekly")
+- ✅ Every Monday (New York) the daily cron emails social@gershonconsulting.com (env FEATURE_STATUS_TO overrides): 🔴 started · 🟠 pending validation · 🟢 done (NEW = changed in last 7 days; greens >30 days folded into a count)
+- ✅ Once per Monday (OrgSetting feature_status_week + Resend Idempotency-Key). Preview: GET /api/publishing/feature-status (?format=html); send now: cron POST ?featureStatus=1
+- ✅ RULE: update src/lib/feature-status-data.ts in the SAME commit as any feature work (state + since date) — the email is only as true as that list
+- ✅ lib/feature-status-model.ts (pure, 4 tests); no schema change
 
 ## v0.24.1 — no weekend publishing, any client (Olivier 2026-11-24: "We don't publish content during week-ends for any clients")
 - ✅ Working days only is no longer a setting — always on (scheduleItem, Autopilot plan, Fill the gap)

@@ -15,6 +15,7 @@ export const runtime = "edge";
  * Publish is internal (lib/publish-extension-caller.ts). Claim semantics are
  * unchanged. Called by Publish's own extension (publish-extension-v0.1.0).
  */
+import { isWeekendInstant } from "@/lib/work-days";
 import { NextRequest, NextResponse } from "next/server";
 import { deliveryScope } from "@/lib/publish-caller";
 import { refusedStatus, resolvePublishExtensionCaller } from "@/lib/publish-extension-caller";
@@ -55,6 +56,8 @@ export async function GET(req: NextRequest) {
     const browserId = validBrowserId(qs.get("browser"));
     const browsers = await listBrowsers(orgId);
     const now = Date.now();
+    // v0.23.3: no publishing on Saturday/Sunday (New York) for any client.
+    if (isWeekendInstant(new Date(now))) return NextResponse.json({ success: true, data: { enabled: true, post: null } });
     const candidates = await prisma.scheduledPost.findMany({
       where: {
         ...(await deliveryScope(orgId, caller.clientId)),

@@ -18,6 +18,7 @@ export const runtime = "edge";
  *   mark_posted { platform, postUrl? }  it was posted by hand
  * DELETE                   removes it (never touches LinkedIn or X)
  */
+import { toWorkday } from "@/lib/work-days";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
@@ -137,7 +138,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       case "retry": {
         const r = await prisma.scheduledPost.updateMany({
           where: { contentId: item.id, status: { in: ["FAILED", "MISSED"] } },
-          data: { status: "SCHEDULED", scheduledAt: now, attempts: 0, lastError: null, claimedAt: null, alertedAt: null },
+          // v0.23.3: a retry on Saturday/Sunday waits for Monday (same time) — no weekend posts.
+          data: { status: "SCHEDULED", scheduledAt: toWorkday(now), attempts: 0, lastError: null, claimedAt: null, alertedAt: null },
         });
         if (!r.count) return bad("Nothing to retry.");
         await prisma.contentItem.update({ where: { id: item.id }, data: { status: "SCHEDULED" } });

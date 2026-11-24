@@ -27,14 +27,12 @@ export const FEATURES: Feature[] = [
   { id: "client-email-posts", title: "Client review emails show the posts + subject \"Publish by Gershon.AI - <Company> - <Month>\"", version: "0.23.2", state: "validation", since: "2026-11-23",
     note: "PR #40 — changes what clients receive, waits for Olivier's OK" },
   { id: "company-tag-browser", title: "Real @company tag when posting through the Chrome extension", version: "0.24.0", state: "validation", since: "2026-11-24",
-    note: "On main, not deployed; extension 0.3.0 on Olivier's computer, then check the first live post" },
-  { id: "no-weekends", title: "No weekend publishing for any client", version: "0.24.1", state: "validation", since: "2026-11-24",
-    note: "On main, not deployed yet" },
-  { id: "calendar-clickable", title: "Calendar: posts are clickable", version: "0.24.1", state: "validation", since: "2026-11-24",
-    note: "On main, not deployed yet" },
-  { id: "feature-status-email", title: "Weekly feature-status email to social@ (this email)", version: "0.25.0", state: "validation", since: "2026-11-24" },
+    note: "Live since build 55; extension 0.3.0 on Olivier's computer, then check the first live post" },
 
   // 🟢 done (live)
+  { id: "feature-status-email", title: "Weekly feature-status email to social@ (this email)", version: "0.25.0", state: "done", since: "2026-11-24" },
+  { id: "no-weekends", title: "No weekend publishing for any client", version: "0.24.1", state: "done", since: "2026-11-24" },
+  { id: "calendar-clickable", title: "Calendar: posts are clickable", version: "0.24.1", state: "done", since: "2026-11-24" },
   { id: "monthly-once", title: "Monthly client email sent once per client per month", version: "0.23.1", state: "done", since: "2026-11-23" },
   { id: "knowledge-links", title: "Knowledge links — one link per client to validate what we know", version: "0.23.0", state: "done", since: "2026-11-19" },
   { id: "semi-autopilot", title: "Semi-autopilot (team checks before the client), working days only, @company tag", version: "0.22.0", state: "done", since: "2026-11-19" },

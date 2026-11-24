@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as m from "../src/lib/company-tag.ts";
 import * as w from "../src/lib/work-days.ts";
-const { parseLinkedInOrg, withLinkedInTag, withXTag, liCommentary, hasTag } = ((m as any).default ?? m) as typeof m;
+const { parseLinkedInOrg, withLinkedInTag, withXTag, liCommentary, hasTag, liSegments } = ((m as any).default ?? m) as typeof m;
 const { isWeekendYmd, nextWorkday, firstFreeWorkday, toWorkday, etDay } = ((w as any).default ?? w) as typeof w;
 
 test("LinkedIn org id from urn, number or company URL", () => {
@@ -52,4 +52,26 @@ test("working days only", () => {
   assert.equal(mon.toISOString(), "2026-11-23T14:30:00.000Z");
   const fri = new Date("2026-11-20T14:30:00Z");
   assert.equal(toWorkday(fri).getTime(), fri.getTime());
+});
+
+test("liSegments: plain text without a tag stays one piece", () => {
+  assert.deepEqual(liSegments("Hello world", ["Altavia"]), [{ text: "Hello world" }]);
+  assert.deepEqual(liSegments("Hello", []), [{ text: "Hello" }]);
+  assert.deepEqual(liSegments("", ["Altavia"]), []);
+});
+
+test("liSegments: the tag above the hashtags becomes a mention piece", () => {
+  const t = "Retail media is growing.\n\n@Altavia\n\n#RetailMedia";
+  const s = liSegments(t, ["Altavia"]);
+  assert.deepEqual(s, [{ text: "Retail media is growing.\n\n" }, { mention: "Altavia" }, { text: "\n\n#RetailMedia" }]);
+  const back = s.map((x) => ("mention" in x ? "@" + x.mention : x.text)).join("");
+  assert.equal(back, t);
+});
+
+test("liSegments: no partial match, longest name wins, several mentions", () => {
+  assert.deepEqual(liSegments("@AltaviaGroup rocks", ["Altavia"]), [{ text: "@AltaviaGroup rocks" }]);
+  assert.deepEqual(liSegments("with @Altavia North America!", ["Altavia", "Altavia North America"]),
+    [{ text: "with " }, { mention: "Altavia North America" }, { text: "!" }]);
+  assert.deepEqual(liSegments("@Altavia and @altavia", ["Altavia"]),
+    [{ mention: "Altavia" }, { text: " and " }, { mention: "altavia" }]);
 });

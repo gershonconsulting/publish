@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     if (!caller.ok) {
       return NextResponse.json({ success: false, code: caller.reason, error: caller.reason === "not_internal" ? "Publish is for the Gershon workspace only" : "Extension not bound to a workspace" }, { status: refusedStatus(caller.reason) });
     }
-    const b = (await req.json().catch(() => null)) as { id?: string; outcome?: string; postUrl?: string | null; error?: string | null; browser?: string } | null;
+    const b = (await req.json().catch(() => null)) as { id?: string; outcome?: string; postUrl?: string | null; error?: string | null; browser?: string; tags?: { name: string; real: boolean }[] } | null;
     if (!b?.id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
     const d = await prisma.scheduledPost.findFirst({ where: { id: b.id, ...(await deliveryScope(caller.orgId, caller.clientId)) } });
     if (!d) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
@@ -75,6 +75,14 @@ export async function POST(req: NextRequest) {
         const item = await prisma.contentItem.findUnique({ where: { id: d.contentId }, select: { version: true } });
         await addEvent(caller.orgId, d.contentId, item?.version ?? 1, "failed", "team", "Publish", `${NET_LABEL[d.platform as Net] ?? d.platform}: ${error || "failed"}`);
       }
+    }
+    // v0.24.0: say on the post whether the company tag became a real LinkedIn tag.
+    if (d.contentId && status === "POSTED" && Array.isArray(b.tags) && b.tags.length) {
+      const item = await prisma.contentItem.findUnique({ where: { id: d.contentId }, select: { version: true } });
+      const line = b.tags.slice(0, 5).map((t) =>
+        t.real ? `@${String(t.name).slice(0, 100)} tagged (linked to the page)`
+          : `@${String(t.name).slice(0, 100)} stayed plain text — LinkedIn did not suggest the page`).join("; ");
+      await addEvent(caller.orgId, d.contentId, item?.version ?? 1, "comment", "team", "Publish", `LinkedIn: ${line}.`).catch(() => null);
     }
     return NextResponse.json({ success: true, data: { status } });
   } catch (e) {

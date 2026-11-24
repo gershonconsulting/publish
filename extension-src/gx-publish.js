@@ -326,7 +326,7 @@
   function norm(t) {
     return String(t || "").replace(/https?:\/\/\S+/gi, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim().toLowerCase();
   }
-  async function report(id, outcome, postUrl, error) {
+  async function report(id, outcome, postUrl, error, tags) {
     // 0.20.0: a failure before the click in the minimized window → retry visibly.
     if (outcome === "failed_before_click" && bgWindow) await markNeedsVisible(id, true);
     else if (outcome !== "failed_before_click") await markNeedsVisible(id, false);
@@ -334,7 +334,7 @@
       await fetch(API + "/result", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: id, outcome: outcome, postUrl: postUrl || null, error: error || null, browser: await browserId() })
+        body: JSON.stringify({ id: id, outcome: outcome, postUrl: postUrl || null, error: error || null, browser: await browserId(), tags: tags || undefined })
       });
     } catch (e) {}
   }
@@ -624,6 +624,82 @@
     }
     return { ok: true, text: ed.innerText || "" };
   }
+  // 0.3.0: put the text in the editor and turn each company tag into a REAL
+  // LinkedIn tag: plain pieces are pasted, a mention is typed ("@" + name, one
+  // letter at a time, like a person) and the company is picked from LinkedIn's
+  // suggestion list. No suggestion → the "@Name" stays as plain text (as before).
+  // Runs in the LinkedIn page; async (executeScript waits for it).
+  async function liFillTagged(segments) {
+    function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    var ed = document.querySelector('[role="dialog"] .ql-editor[contenteditable="true"]') || document.querySelector(".share-creation-state .ql-editor");
+    if (!ed) return { ok: false, why: "no editor" };
+    ed.focus();
+    try { document.execCommand("selectAll", false, null); document.execCommand("delete", false, null); } catch (e) {}
+    function caretToEnd() {
+      try {
+        var r = document.createRange(); r.selectNodeContents(ed); r.collapse(false);
+        var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      } catch (e) {}
+    }
+    function paste(t) {
+      if (!t) return;
+      caretToEnd();
+      var before = (ed.innerText || "").length;
+      try {
+        var dt = new DataTransfer();
+        dt.setData("text/plain", t);
+        ed.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+      } catch (e) {}
+      if ((ed.innerText || "").length <= before) { try { document.execCommand("insertText", false, t); } catch (e) {} }
+    }
+    function mentionCount() {
+      return ed.querySelectorAll('a[data-entity-urn], [data-entity-urn], .ql-mention, a[href*="/company/"], a[href*="/in/"], span[data-mention]').length;
+    }
+    function visible(el) { var r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; }
+    function findOption(name) {
+      var want = name.toLowerCase().replace(/\s+/g, " ").trim();
+      var opts = Array.from(document.querySelectorAll('[role="listbox"] [role="option"], [role="option"], .editor-typeahead-fetch li, .typeahead-results li')).filter(visible);
+      var scored = opts.map(function (o) {
+        var lines = (o.innerText || "").split("\n").map(function (x) { return x.toLowerCase().replace(/\s+/g, " ").trim(); }).filter(Boolean);
+        var first = lines[0] || "";
+        var sc = first === want ? 3 : first.indexOf(want) === 0 ? 2 : (o.innerText || "").toLowerCase().indexOf(want) !== -1 ? 1 : 0;
+        return { o: o, sc: sc };
+      }).filter(function (x) { return x.sc > 0; }).sort(function (a, b) { return b.sc - a.sc; });
+      return scored.length ? scored[0].o : null;
+    }
+    var tags = [];
+    for (var i = 0; i < segments.length; i++) {
+      var sg = segments[i];
+      if (sg && typeof sg.text === "string") { paste(sg.text); await wait(150); continue; }
+      if (!sg || !sg.mention) continue;
+      var name = String(sg.mention);
+      caretToEnd();
+      var had = mentionCount();
+      try { document.execCommand("insertText", false, "@"); } catch (e) {}
+      for (var c = 0; c < name.length; c++) {
+        try { document.execCommand("insertText", false, name[c]); } catch (e) {}
+        await wait(70);
+      }
+      var opt = null;
+      for (var k = 0; k < 20 && !opt; k++) { await wait(250); opt = findOption(name); }
+      var real = false;
+      if (opt) {
+        try {
+          opt.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+          opt.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+          opt.click();
+        } catch (e) {}
+        for (var v = 0; v < 8 && !real; v++) { await wait(250); real = mentionCount() > had; }
+      }
+      if (!real) {
+        // Close the suggestion list; the typed "@Name" stays as plain text.
+        try { ed.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); } catch (e) {}
+      }
+      tags.push({ name: name, real: real });
+      ed.focus();
+    }
+    return { ok: true, text: ed.innerText || "", tags: tags };
+  }
   // Runs in the LinkedIn page: open the picture picker inside the post box.
   function liOpenMediaPicker() {
     var dlg = document.querySelector('[role="dialog"]') || document;
@@ -750,8 +826,21 @@
 
     var want = norm(d.text).slice(0, 40);
     var filled = null;
+    var tagged = null;
+    var segs = Array.isArray(d.segments) && d.segments.some(function (x) { return x && x.mention; }) ? d.segments : null;
     for (var f = 0; f < 3; f++) {
-      filled = await run(w.tabId, liFill, [d.text]);
+      // 0.3.0: the company tag typed and picked (real tag); last try = plain paste, as before.
+      if (segs && f < 2) {
+        var ft = await run(w.tabId, liFillTagged, [segs]);
+        tagged = ft && ft.tags ? ft.tags : null;
+      } else {
+        if (segs) await run(w.tabId, function () {
+          var ed = document.querySelector('[role="dialog"] .ql-editor[contenteditable="true"]') || document.querySelector(".share-creation-state .ql-editor");
+          if (ed) { ed.focus(); try { document.execCommand("selectAll", false, null); document.execCommand("delete", false, null); } catch (e) {} }
+        });
+        filled = await run(w.tabId, liFill, [d.text]);
+        tagged = segs ? segs.filter(function (x) { return x && x.mention; }).map(function (x) { return { name: x.mention, real: false }; }) : null;
+      }
       await sleep(1500);
       var c = await run(w.tabId, liReadComposer);
       if (c && norm(c.text).indexOf(want.slice(0, 25)) === 0) { filled = c; break; }

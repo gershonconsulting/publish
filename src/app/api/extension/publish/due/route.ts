@@ -4,7 +4,8 @@ export const runtime = "edge";
  * (v4.37.0, extension 0.15.0)
  *
  * GET (extension token) ?skip=TWITTER,LINKEDIN   (networks this browser is signed out of)
- *   → { enabled, post: { id, platform, target, text, scheduledAt, media: [{url,mime,name}] } | null }
+ *   → { enabled, post: { id, platform, target, text, scheduledAt, media: [{url,mime,name}], segments? } | null }
+ *   segments (v0.24.0, LinkedIn only): [{text}|{mention}] — the company tag to type and pick.
  *
  * One delivery per call, CLAIMED atomically (SCHEDULED → POSTING), so nothing
  * is published twice even with two browsers. The extension loops until it
@@ -18,7 +19,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { deliveryScope } from "@/lib/publish-caller";
 import { refusedStatus, resolvePublishExtensionCaller } from "@/lib/publish-extension-caller";
 import prisma from "@/lib/db-raw";
-import { getPublisherState, getSettings, savePublisherState, sweep } from "@/lib/publishing";
+import { getPublisherState, getSettings, resolveTag, savePublisherState, sweep } from "@/lib/publishing";
+import { hasTag, liSegments, type LiSegment } from "@/lib/company-tag";
 import { listBrowsers, shouldHandTo, validBrowserId } from "@/lib/publish-browsers";
 
 function parseMedia(j: string | null): { url: string; mime: string; name: string }[] {
@@ -74,11 +76,20 @@ export async function GET(req: NextRequest) {
         data: { status: "POSTING", claimedAt: new Date(), attempts: { increment: 1 } },
       });
       if (claimed.count === 1) {
+        // v0.24.0 (extension 0.3.0): the company tag as a piece the browser TYPES,
+        // so LinkedIn turns it into a real tag. Older extensions ignore `segments`.
+        let segments: LiSegment[] | undefined;
+        if (d.platform === "LINKEDIN" && d.clientId && d.text) {
+          try {
+            const tag = await resolveTag(orgId, d.clientId);
+            if (!tag.off && tag.name && hasTag(d.text, tag.name)) segments = liSegments(d.text, [tag.name]);
+          } catch { /* plain text, as before */ }
+        }
         return NextResponse.json({
           success: true,
           data: {
             enabled: true,
-            post: { id: d.id, platform: d.platform, target: d.target, text: d.text, scheduledAt: d.scheduledAt, media: parseMedia(d.mediaJson) },
+            post: { id: d.id, platform: d.platform, target: d.target, text: d.text, scheduledAt: d.scheduledAt, media: parseMedia(d.mediaJson), segments },
           },
         });
       }

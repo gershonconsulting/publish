@@ -1,5 +1,13 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-20 (v0.23.1 monthly client email once per client per month — HOLD, client-facing)
+Last updated: 2026-11-24 (v0.24.0 real LinkedIn company tag through the browser, extension 0.3.0)
+
+## v0.24.0 — real @company tag on the browser route (Olivier 2026-11-24, option "2")
+- ✅ /api/extension/publish/due sends `segments` for LinkedIn posts carrying the company tag (lib/company-tag.ts liSegments, 3 tests)
+- ✅ Extension 0.3.0: pastes the plain pieces, TYPES "@Name", picks the company in LinkedIn's suggestion list → real tag; no suggestion → plain "@Name", post still goes out; 3rd try = old plain paste
+- ✅ Result reports `tags`; the post history says "tagged (linked to the page)" or "stayed plain text"
+- ✅ tsc clean, tests 138/138, next build OK (public/publish-extension-v0.3.0.zip); no schema change; older extensions ignore `segments`
+- ❌ Extension folder on Olivier's computer (publish-chrome-extension) must get the 0.3.0 files — self-update then reloads it
+- ❌ First live LinkedIn post through the browser: check the tag is a link (LinkedIn's suggestion list selectors are a best guess)
 
 ## v0.23.1 — monthly client email ONCE per client per month (nightly 2026-11-20, HOLD: client-facing)
 - Resend: arouleau@altavia.co got 4 emails "Gershon Consulting Publish - Altavia (Alexandre) - November 2026":

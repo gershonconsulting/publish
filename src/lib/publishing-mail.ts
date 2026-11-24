@@ -70,6 +70,8 @@ export const PUBLISH_MAILS = {
   CONN_WEEKLY: { no: "PUB-215", audience: "internal", title: "Weekly connections report" },
   // v0.22.0: semi-autopilot — the written month waits for the team's check before any client sees it.
   AUTOPILOT_TEAM_CHECK: { no: "PUB-216", audience: "internal", title: "Autopilot month to check before the client" },
+  // v0.25.0: every Monday, status of every Publish feature (🔴 started / 🟠 pending validation / 🟢 done) — to social@gershonconsulting.com.
+  FEATURE_WEEKLY: { no: "PUB-217", audience: "internal", title: "Weekly feature status" },
   // A validation email (1xx) that goes to the team because the company has no
   // reviewer is re-labelled internal at send time, keeping its number.
 } as const satisfies Record<string, MailDef>;

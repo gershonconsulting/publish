@@ -86,7 +86,7 @@ export async function flushHeld(orgId: string, send: Sender, sendReady: ReadySen
     } else {
       const c = combineHeld(group);
       const mail = c.mail as PubMail;
-      ok = await send(first.to, c.subject, c.html, first.cta, mail, first.audience,
+      ok = await send(first.to, c.subject, c.html, c.cta, mail, first.audience,
         mailIdempotencyKey(PUBLISH_MAILS[mail].no, now, [orgId, first.clientId, first.to, "held", c.idParts]));
     }
     if (!ok) continue; // kept: the next sweep tries again

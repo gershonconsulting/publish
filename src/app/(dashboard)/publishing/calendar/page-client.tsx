@@ -154,25 +154,34 @@ export function PublishingCalendarClient() {
             const k = dayKey(d);
             const list = byDay.get(k) || [];
             return (
-              <button
+              <div
                 key={k}
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelected(k)}
-                className={`min-h-[88px] text-left border-b border-r border-gray-100 px-1.5 py-1 hover:bg-gray-50 ${selected === k ? "bg-gray-50 ring-1 ring-inset ring-gray-900/20" : ""} ${d.getMonth() === month.getMonth() ? "" : "opacity-40"}`}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(k); } }}
+                className={`min-h-[88px] text-left cursor-pointer border-b border-r border-gray-100 px-1.5 py-1 hover:bg-gray-50 ${selected === k ? "bg-gray-50 ring-1 ring-inset ring-gray-900/20" : ""} ${d.getMonth() === month.getMonth() ? "" : "opacity-40"}`}
               >
                 <div className={`text-[11px] mb-1 ${k === today ? "inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-600 text-white font-semibold" : "text-gray-500"}`}>{d.getDate()}</div>
                 <div className="space-y-0.5">
                   {list.slice(0, 3).map((i) => (
-                    <div key={i.id} className="flex items-center gap-1 text-[10.5px] leading-tight text-gray-700">
+                    <button
+                      type="button"
+                      key={i.id}
+                      title={`Open: ${(i.text || "").slice(0, 120)}`}
+                      onClick={(e) => { e.stopPropagation(); setSelected(k); setOpenId(i.id); }}
+                      className="w-full flex items-center gap-1 text-[10.5px] leading-tight text-gray-700 text-left rounded px-0.5 -mx-0.5 hover:bg-white hover:text-gray-900 hover:underline"
+                    >
                       {i.deliveries.length
                         ? i.deliveries.map((x) => <span key={x.id} className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: DOT[x.status] }} />)
                         : <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: ITEM_STYLE[i.status].dot }} />}
                       <span className="tabular-nums text-gray-500">{new Date(i.scheduledAt!).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span>
                       <span className="truncate">{i.clientId ? clientName.get(i.clientId) : i.text}</span>
-                    </div>
+                    </button>
                   ))}
                   {list.length > 3 && <div className="text-[10px] text-gray-400">+{list.length - 3} more</div>}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>

@@ -1,6 +1,10 @@
 # Publish (publish.gershon.ai) — status
 Last updated: 2026-11-24 (v0.24.0 real LinkedIn company tag through the browser, extension 0.3.0)
 
+## v0.24.1 — Calendar: posts are clickable (Olivier 2026-11-24: "The posts are not clickable on the calendar view") ✅
+- Each post line inside a day box on /publishing/calendar opens the post panel directly (before, the day box was one button that only selected the day).
+- Day box is now a div role=button (no nested buttons); Enter/Space still selects the day.
+
 ## v0.24.0 — real @company tag on the browser route (Olivier 2026-11-24, option "2")
 - ✅ /api/extension/publish/due sends `segments` for LinkedIn posts carrying the company tag (lib/company-tag.ts liSegments, 3 tests)
 - ✅ Extension 0.3.0: pastes the plain pieces, TYPES "@Name", picks the company in LinkedIn's suggestion list → real tag; no suggestion → plain "@Name", post still goes out; 3rd try = old plain paste

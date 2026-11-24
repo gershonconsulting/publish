@@ -19,6 +19,7 @@ import {
   getLinked, saveLinked, linkedinPost, linkedinToken, liMatches, xMatches, xPost, xTokenFresh, type Linked,
 } from "@/lib/linked-accounts";
 import { stripLinks } from "@/lib/x-links";
+import { isWeekendInstant } from "@/lib/work-days";
 import { resolveTag } from "@/lib/publishing";
 
 function unb64(s: string): Uint8Array<ArrayBuffer> {
@@ -72,6 +73,7 @@ export async function apiPublishDue(orgId: string): Promise<{ posted: number; fa
   let posted = 0, failed = 0;
   const cache = new Map<string, Linked>();
   for (const d of due) {
+    if (isWeekendInstant(new Date(now))) break; // v0.23.3: never publish on Saturday/Sunday (New York)
     if (!(await apiRouted(orgId, d, cache))) continue;
     const claimed = await prisma.scheduledPost.updateMany({
       where: { id: d.id, status: "SCHEDULED" },

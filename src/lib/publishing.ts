@@ -35,7 +35,8 @@ import type { ClientType } from "@prisma/client";
 import prisma from "@/lib/db-raw";
 import { siteUrl } from "@/lib/site";
 import { parseLinkedInOrg, withLinkedInTag, withXTag, type CompanyTag } from "@/lib/company-tag";
-import { toWorkday } from "@/lib/work-days";
+import { toWorkday, isWeekendInstant } from "@/lib/work-days";
+const DAY_MS = 86400000;
 import { withAuditBcc } from "@/lib/mail-bcc";
 import { sendResend } from "@/lib/resend-send";
 import { flushHeld, hold, markSent, shouldHold, shouldHoldOnArrival } from "@/lib/mail-burst";
@@ -76,6 +77,7 @@ export type PublishSettings = {
   /** Who is told content is validated and ready for publishing (Olivier, 2026-10-18). */
   readyEmail: string;
   /** v0.22.0 (Olivier, 2026-11-19): no posts on Saturday or Sunday (New York). Default on. */
+  /** v0.23.3: ignored — weekends are always off for every client. Kept for stored settings. */
   weekdaysOnly?: boolean;
 };
 export const READY_EMAIL_DEFAULT = "social@gershonconsulting.com";
@@ -648,7 +650,8 @@ export async function scheduleItem(orgId: string, itemId: string, when: Date): P
   if (problems.length) return problems;
 
   // v0.22.0: working days only — a Saturday/Sunday post moves to Monday, same time.
-  if (settings.weekdaysOnly !== false) {
+  // v0.23.3 (Olivier 2026-11-24): "We don't publish content during week-ends for any clients" — no switch.
+  {
     const moved = toWorkday(when);
     if (moved.getTime() !== when.getTime()) {
       await addEvent(orgId, item.id, item.version, "comment", "team", "Publishing", "Moved from the weekend to the next working day (no Saturday or Sunday posts).");
@@ -757,6 +760,30 @@ export function orgAlertStore(orgId: string): AlertStore {
   };
 }
 
+/** v0.23.3: SCHEDULED deliveries on a weekend (New York) → next Monday, same time. */
+export async function moveWeekendDeliveries(orgId: string, now = Date.now()): Promise<number> {
+  const rows = await prisma.scheduledPost.findMany({
+    where: { organizationId: orgId, status: "SCHEDULED", scheduledAt: { gte: new Date(now - 3 * DAY_MS) } },
+    select: { id: true, contentId: true, scheduledAt: true },
+    take: 500,
+  });
+  let n = 0;
+  for (const r of rows) {
+    if (!r.scheduledAt || !isWeekendInstant(r.scheduledAt)) continue;
+    const when = toWorkday(r.scheduledAt);
+    await prisma.scheduledPost.update({ where: { id: r.id }, data: { scheduledAt: when } });
+    if (r.contentId) {
+      const it = await prisma.contentItem.findUnique({ where: { id: r.contentId }, select: { version: true, scheduledAt: true } });
+      if (it && it.scheduledAt && isWeekendInstant(it.scheduledAt)) {
+        await prisma.contentItem.update({ where: { id: r.contentId }, data: { scheduledAt: when } });
+        await addEvent(orgId, r.contentId, it.version, "comment", "team", "Publishing", "Moved from the weekend to Monday: no Saturday or Sunday posts for any client.");
+      }
+    }
+    n++;
+  }
+  return n;
+}
+
 export async function sweep(orgId: string): Promise<{ missed: number; failed: number; verified: number }> {
   // v0.18.2: emails held by the burst window (PUB-101/202/204/214) go out as one once it is over.
   try {
@@ -766,6 +793,9 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
       (ids, who) => notifyReadyForPublishing(orgId, ids, who, "approved one by one", { flush: true }),
     );
   } catch { /* held rows stay; the next sweep tries again */ }
+  // v0.23.3: no publishing on Saturday/Sunday for any client — a delivery still
+  // planned on a weekend moves to Monday, same New York time, before anything goes out.
+  try { await moveWeekendDeliveries(orgId); } catch { /* the publish guards below still hold */ }
   // v4.60.0: due posts of companies with a connected account go out through the API first.
   try {
     const { apiPublishDue } = await import("@/lib/linked-publish");

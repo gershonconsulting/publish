@@ -1,5 +1,12 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-24 (v0.24.0 real LinkedIn company tag through the browser, extension 0.3.0)
+Last updated: 2026-11-24 (v0.24.1 no weekend publishing for any client)
+
+## v0.24.1 — no weekend publishing, any client (Olivier 2026-11-24: "We don't publish content during week-ends for any clients")
+- ✅ Working days only is no longer a setting — always on (scheduleItem, Autopilot plan, Fill the gap)
+- ✅ Weekend cleanup (clearWeekends) runs for EVERY company each Autopilot step, Autopilot on or off
+- ✅ Sweep moves any SCHEDULED delivery on Sat/Sun (NY) to Monday, same time, before publishing (moveWeekendDeliveries)
+- ✅ API route and extension never publish on Sat/Sun NY; "Retry" on a weekend waits for Monday
+- ✅ weekend-off tests 3/3; no schema change
 
 ## v0.24.0 — real @company tag on the browser route (Olivier 2026-11-24, option "2")
 - ✅ /api/extension/publish/due sends `segments` for LinkedIn posts carrying the company tag (lib/company-tag.ts liSegments, 3 tests)

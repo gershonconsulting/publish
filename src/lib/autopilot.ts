@@ -789,16 +789,17 @@ export async function runStep(orgId: string, budget = 3, now = new Date()): Prom
 
 async function runStepLocked(orgId: string, budget: number, now: Date): Promise<StepResult> {
   const s = await getAutopilotSettings(orgId);
-  const weekdaysOnly = (await getSettings(orgId)).weekdaysOnly !== false;
+  const weekdaysOnly = true; // v0.23.3: always — no weekend posts for any client
   const w = planWindow(s, now, weekdaysOnly);
   const base: StepResult = { enabled: false, window: { label: w.label, days: w.days.length }, written: 0, remaining: 0, picturesFixed: 0, revised: 0, autoApproved: 0, scheduled: 0, submitted: 0, emailed: false, problems: [], errors: [] };
-  if (!(await isEnabled(orgId, s))) return base;
-  base.enabled = true;
+  // v0.23.3: weekend posts are cleared for EVERY company, Autopilot on or off.
   if (weekdaysOnly) {
     const wk = await clearWeekends(orgId, s, now.getTime());
     base.weekendMoved = wk.moved;
     base.weekendRemoved = wk.removed;
   }
+  if (!(await isEnabled(orgId, s))) return base;
+  base.enabled = true;
   const clients = await autopilotClients(orgId, s);
   await alignObjectives(orgId, clients.map((c) => c.id));
 
@@ -839,7 +840,7 @@ async function runStepLocked(orgId: string, budget: number, now: Date): Promise<
 /** What the Publishing page shows. */
 export async function status(orgId: string, now = new Date()) {
   const s = await getAutopilotSettings(orgId);
-  const w = planWindow(s, now, (await getSettings(orgId)).weekdaysOnly !== false);
+  const w = planWindow(s, now, true);
   const enabled = await isEnabled(orgId, s);
   const clients = await autopilotClients(orgId, s);
   const all = await prisma.client.findMany({
@@ -913,7 +914,7 @@ export async function fillGaps(orgId: string, clientId: string, days: string[], 
   try {
     const s = await getAutopilotSettings(orgId);
     // Re-check: a day is free only if NO post of this company is planned on it.
-    const weekdaysOnly = (await getSettings(orgId)).weekdaysOnly !== false;
+    const weekdaysOnly = true; // v0.23.3: always — no weekend posts for any client
     const wanted = Array.from(new Set(days.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !(weekdaysOnly && isWeekendYmd(d))))).sort();
     if (!wanted.length) return out;
     const from = etInstant(wanted[0], "00:00");

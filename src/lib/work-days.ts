@@ -67,3 +67,8 @@ export function toWorkday(when: Date): Date {
   if (!isWeekendYmd(day)) return when;
   return etAt(nextWorkday(day), hmFmt.format(when).replace(/^24/, "00"));
 }
+
+/** v0.23.3: true when the instant falls on a Saturday/Sunday in New York. */
+export function isWeekendInstant(when: Date): boolean {
+  return isWeekendYmd(etDay(when));
+}

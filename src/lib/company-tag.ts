@@ -101,3 +101,31 @@ export function liCommentary(text: string, mentions: { name: string; urn: string
   }
   return out + plain(text.slice(last));
 }
+
+/**
+ * v0.24.0 — real tag through the publishing browser. The post text cut into
+ * plain pieces and "@Name" mentions, so the extension pastes the plain pieces
+ * and TYPES each mention ("@" + name), then picks the company from LinkedIn's
+ * suggestion list. Joining every piece back ("@" before a mention) gives the
+ * original text exactly.
+ */
+export type LiSegment = { text: string } | { mention: string };
+
+export function liSegments(text: string, names: (string | null | undefined)[]): LiSegment[] {
+  const ns = Array.from(new Set(names.map((n) => (n || "").trim()).filter(Boolean)));
+  if (!ns.length || !text) return text ? [{ text }] : [];
+  // Longest first, so "@Altavia North America" wins over "@Altavia".
+  ns.sort((a, b) => b.length - a.length);
+  const re = new RegExp(ns.map((n) => `@${reEsc(n)}(?![\\p{L}\\p{N}_])`).join("|"), "giu");
+  const out: LiSegment[] = [];
+  let last = 0;
+  for (const hit of text.matchAll(re)) {
+    const i = hit.index ?? 0;
+    if (i > last) out.push({ text: text.slice(last, i) });
+    // Typed as written in the post (LinkedIn's search is not case-sensitive).
+    out.push({ mention: hit[0].slice(1) });
+    last = i + hit[0].length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last) });
+  return out;
+}

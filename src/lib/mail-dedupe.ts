@@ -167,11 +167,11 @@ export function groupHeld(events: HeldEvent[]): HeldEvent[][] {
 }
 
 /** One email out of several held ones. A single held event goes out as it was written. */
-export function combineHeld(events: HeldEvent[]): { subject: string; html: string; mail: string; idParts: string } {
+export function combineHeld(events: HeldEvent[]): { subject: string; html: string; mail: string; idParts: string; cta: { href: string; label: string } } {
   const first = events[0];
   const n = events.length;
   const idParts = sortedIds(events.map((e) => e.id));
-  if (n === 1) return { subject: first.subject, html: `${first.intro || ""}${first.html}`, mail: first.mail, idParts };
+  if (n === 1) return { subject: first.subject, html: `${first.intro || ""}${first.html}`, mail: first.mail, idParts, cta: first.cta };
   const sep = `<hr style="border:none;border-top:1px solid #eee;margin:16px 0">`;
   return {
     subject: first.subjectMany.replace("{n}", String(n)),
@@ -179,5 +179,12 @@ export function combineHeld(events: HeldEvent[]): { subject: string; html: strin
     // Several posts to review in one email is a batch (PUB-102).
     mail: first.mail === "REVIEW_ONE" ? "REVIEW_BATCH" : first.mail,
     idParts,
+    // v0.25.1: a PUB-101 link opens on its one post (?post=); several posts in one email → the whole page.
+    cta: first.cta ? { ...first.cta, href: withoutPostFocus(first.cta.href) } : first.cta,
   };
+}
+
+/** Drops the one-post focus (?post=<id>) from a review link. */
+export function withoutPostFocus(href: string): string {
+  return href.replace(/([?&])post=[^&#]*&?/, "$1").replace(/[?&]$/, "");
 }

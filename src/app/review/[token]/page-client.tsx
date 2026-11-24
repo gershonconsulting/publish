@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, CheckCheck, Loader2, MessageSquare, PencilLine } from "lucide-react";
 import { ReviewBadge } from "@/components/publishing/shared";
+import { approvableIds, lastSubmitted, latestBatch, splitFocus } from "@/lib/review-focus";
 
 type Comment = { id: string; authorName: string | null; authorRole: "team" | "client"; kind: string; body: string | null; version: number; createdAt: string };
 type Item = {
@@ -24,8 +25,8 @@ const NAME_KEY = "review_name";
 /** Batch a post was sent in (v4.41.0): the latest "submitted" event's
  *  "batch:<name>", else "<Company> — <Month YYYY>" of its planned date. */
 function batchOf(i: Item, client: string): string {
-  const sub = [...i.comments].reverse().find((c) => c.kind === "submitted" && (c.body || "").startsWith("batch:"));
-  if (sub) return (sub.body as string).slice(6);
+  const sub = latestBatch(i.comments);
+  if (sub) return sub;
   const d = new Date(i.scheduledAt || i.updatedAt);
   return `${client} — ${d.toLocaleString("en-US", { month: "long", year: "numeric" })}`;
 }
@@ -37,8 +38,9 @@ function fmt(iso: string | null) {
   return iso ? new Date(iso).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
 }
 
-export function ReviewClient({ token }: { token: string }) {
+export function ReviewClient({ token, focusBatch = null, focusPost = null }: { token: string; focusBatch?: string | null; focusPost?: string | null }) {
   const [data, setData] = useState<Data | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [name, setName] = useState("");
 
@@ -67,15 +69,22 @@ export function ReviewClient({ token }: { token: string }) {
   if (err && !data) return <Center><p className="text-gray-700">{err}</p></Center>;
   if (!data) return <Center><Loader2 className="animate-spin text-gray-400" /></Center>;
 
-  const waiting = data.items.filter((i) => i.status === "IN_REVIEW");
+  // v0.25.1: the link from an email opens on the posts that email was about (batch or one post);
+  // the company's other posts stay one click away. "Approve all" approves only what is shown.
+  const split = splitFocus(data.items, { batch: focusBatch, post: focusPost });
+  const shown = split.active && !showAll ? split.focus : data.items;
+  const hidden = split.active && !showAll ? split.rest : [];
+  const hiddenWaiting = hidden.filter((i) => i.status === "IN_REVIEW" || i.status === "CHANGES_REQUESTED").length;
+  const waitingIds = approvableIds(shown);
   const groups = new Map<string, Item[]>();
-  for (const i of data.items) {
+  for (const i of shown) {
     const k = batchOf(i, data.client);
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k)!.push(i);
   }
   const open = (l: Item[]) => l.some((i) => i.status === "IN_REVIEW" || i.status === "CHANGES_REQUESTED");
-  const ordered = Array.from(groups.entries()).sort((x, y) => Number(open(y[1])) - Number(open(x[1])));
+  // Open batches first, then the most recently sent one first (was: oldest batch on top).
+  const ordered = Array.from(groups.entries()).sort((x, y) => Number(open(y[1])) - Number(open(x[1])) || lastSubmitted(y[1]) - lastSubmitted(x[1]));
 
   return (
     <div className="min-h-screen bg-[#f5f6f8]">
@@ -99,7 +108,7 @@ export function ReviewClient({ token }: { token: string }) {
             Couldn&apos;t refresh just now: {err} — what you see may be slightly out of date.
           </div>
         )}
-        {waiting.length > 0 && <ApproveAll n={waiting.length} token={token} name={name} onDone={load} />}
+        {waitingIds.length > 0 && <ApproveAll ids={waitingIds} token={token} name={name} onDone={load} />}
         {ordered.length === 0 && (
           <p className="text-sm text-gray-500 bg-white border border-dashed border-gray-300 rounded-xl p-6 text-center">Nothing to review right now — thank you!</p>
         )}
@@ -119,20 +128,28 @@ export function ReviewClient({ token }: { token: string }) {
             </div>
           </section>
         ))}
+        {split.active && (
+          <div className="text-center">
+            <button onClick={() => setShowAll((v) => !v)} className="text-sm underline text-gray-600">
+              {showAll ? "Show only the posts from the email" : `Show the other ${hidden.length} post${hidden.length === 1 ? "" : "s"} of ${data.client.trim()}${hiddenWaiting ? ` (${hiddenWaiting} still waiting)` : ""}`}
+            </button>
+          </div>
+        )}
         <p className="text-[11px] text-gray-400 text-center">This private link is for {data.client} only. Nothing is published before you approve it.</p>
       </main>
     </div>
   );
 }
 
-function ApproveAll({ n, token, name, onDone }: { n: number; token: string; name: string; onDone: () => void }) {
+function ApproveAll({ ids, token, name, onDone }: { ids: string[]; token: string; name: string; onDone: () => void }) {
+  const n = ids.length;
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   async function go() {
     if (!confirm(`Approve all ${n} post${n === 1 ? "" : "s"} waiting for your review?`)) return;
     setBusy(true); setMsg(null);
     try {
-      const r = await fetch(`/api/review/${token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "approve_all", name }) });
+      const r = await fetch(`/api/review/${token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "approve_all", name, ids }) });
       const j = await r.json();
       if (!j?.success) throw new Error(j?.error || "Could not approve.");
       setMsg("All approved — thank you.");
@@ -142,7 +159,7 @@ function ApproveAll({ n, token, name, onDone }: { n: number; token: string; name
   }
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center gap-3">
-      <div className="flex-1 text-sm text-gray-700"><b>{n}</b> post{n === 1 ? " is" : "s are"} waiting for your approval.</div>
+      <div className="flex-1 text-sm text-gray-700"><b>{n}</b> post{n === 1 ? " is" : "s are"} waiting for your approval on this page.</div>
       <button disabled={busy} onClick={go} className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white bg-emerald-600 rounded-lg disabled:opacity-50">
         {busy ? <Loader2 size={14} className="animate-spin" /> : <CheckCheck size={16} />} Approve all ({n})
       </button>

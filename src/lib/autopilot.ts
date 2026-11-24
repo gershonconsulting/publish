@@ -47,6 +47,7 @@ import { withCompanyTags } from "@/lib/publishing";
 import { sendOncePerMonth } from "@/lib/monthly-once";
 import { dbOnceStore } from "@/lib/monthly-once-db";
 import { brandPaletteFor, competitiveSnapshot, draftKB, getKB, kbForPrompt, snapshotForPrompt, type KnowledgeBase } from "@/lib/knowledge-base";
+import { focusedReviewUrl } from "@/lib/review-focus";
 
 export const AUTOPILOT = "Autopilot";
 const TZ = "America/New_York";
@@ -540,7 +541,8 @@ async function submitMonth(orgId: string, s: AutopilotSettings, w: PlanWindow): 
   let emailed = false;
   for (const [clientId, n] of byClient) {
     const c = clients.find((x) => x.id === clientId)!;
-    const link = reviewUrl(await reviewToken(orgId, clientId));
+    // v0.25.1: open the review page on this month's Autopilot batch only.
+    const link = focusedReviewUrl(reviewUrl(await reviewToken(orgId, clientId)), { batch: `${c.name} — ${w.label} (Autopilot)` });
     const v = await validatorOf(orgId, clientId);
     const hi = v.name ? `Hi ${esc(v.name.split(/\s+/)[0])},` : "Hello,";
     const list = (await prisma.contentItem.findMany({

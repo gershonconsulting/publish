@@ -30,6 +30,7 @@ export const FEATURES: Feature[] = [
     note: "Live since build 55; extension 0.3.0 on Olivier's computer, then check the first live post" },
 
   // 🟢 done (live)
+  { id: "review-link-focus", title: "Review link opens on the posts of the email (batch or post); \"Approve all\" approves only those", version: "0.25.1", state: "done", since: "2026-11-24" },
   { id: "feature-status-email", title: "Weekly feature-status email to social@ (this email)", version: "0.25.0", state: "done", since: "2026-11-24" },
   { id: "no-weekends", title: "No weekend publishing for any client", version: "0.24.1", state: "done", since: "2026-11-24" },
   { id: "calendar-clickable", title: "Calendar: posts are clickable", version: "0.24.1", state: "done", since: "2026-11-24" },

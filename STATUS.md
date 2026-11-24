@@ -1,5 +1,12 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-24 (v0.25.0 weekly feature-status email)
+Last updated: 2026-11-24 (v0.25.1 review link opens on the emailed posts)
+
+## v0.25.1 — review link = the posts of the email (Olivier 2026-11-24, Amphasys PUB-102 December: "Les posts affichés … ne correspondent pas aux posts sélectionnés pour review")
+- ✅ Cause: /review/<token> listed every post of the company (60 for Amphasys) with the old "October 2026" batch (26 posts, still IN_REVIEW) on top; "Approve all" approved all 38 waiting posts
+- ✅ Emails now link to /review/<token>?batch=<name> (PUB-102, PUB-103) or ?post=<id> (PUB-101; grouped PUB-101s drop it). Page shows only those posts, others behind "Show the other N posts"; Approve all sends the ids shown
+- ✅ API reads waiting posts (take 300) separately from history (take 100) — a batch can no longer fall off the list
+- ✅ lib/review-focus.ts (pure, 7 tests); tsc clean; no schema change
+- ❌ Amphasys: 26 posts of "Amphasys — October 2026" still IN_REVIEW with November dates already passed — decide: withdraw or keep
 
 ## v0.25.0 — weekly feature status PUB-217 (Olivier 2026-11-24: "Send the status of all features to social@ … Red started, Orange pending validation, Green done weekly")
 - ✅ Every Monday (New York) the daily cron emails social@gershonconsulting.com (env FEATURE_STATUS_TO overrides): 🔴 started · 🟠 pending validation · 🟢 done (NEW = changed in last 7 days; greens >30 days folded into a count)

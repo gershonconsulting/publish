@@ -15,6 +15,7 @@ import { PUBLISH_MAILS, clientSubject, publishLink } from "@/lib/publishing-mail
 import { markSent } from "@/lib/mail-burst";
 import { mailIdempotencyKey, sortedIds } from "@/lib/mail-dedupe";
 import { claimAnnouncement, releaseAnnouncement } from "@/lib/monthly-once-db";
+import { focusedReviewUrl } from "@/lib/review-focus";
 
 /** Default batch name, CloudCampaign-style: "<Company> — <Month YYYY>". */
 export function batchName(client: string, when = new Date()): string {
@@ -59,7 +60,8 @@ export async function submitForReview(
       intro: `<p>${hi}</p>`,
       html: `<p>A new post is ready for your review${item.version > 1 ? ` (version ${item.version})` : ""}:</p>${quote(item.text)}
        <p>You can comment, ask for changes, or approve it — nothing is published before you approve.</p>`,
-      cta: { href: reviewUrl(token), label: "Review the post" },
+      // v0.25.1: the link opens on this post (it was the whole company).
+      cta: { href: focusedReviewUrl(reviewUrl(token), { post: item.id }), label: "Review the post" },
       audience: v.isTeam ? "internal" : "client",
     }, [item.id, item.version]);
     if (!queued) await releaseAnnouncement(orgId, item.id, item.version);
@@ -116,7 +118,8 @@ export async function submitBatch(
         clientSubject(client?.name, v.isTeam ? null : target.reviewerName, firstPlanned ?? new Date()),
         `<p>${hi}</p><p><b>${esc(batch)}</b> is ready for your review — ${sent.length} post${sent.length === 1 ? "" : "s"}:</p><ul>${list}</ul>
          <p>Approve them one by one or all at once, comment, or ask for changes. Nothing is published before you approve.</p>`,
-        { href: reviewUrl(token), label: "Review the content" },
+        // v0.25.1: the link opens on THIS batch only (Amphasys 2026-11-24 opened on an old October batch).
+        { href: focusedReviewUrl(reviewUrl(token), { batch }), label: "Review the content" },
         "REVIEW_BATCH",
         v.isTeam ? "internal" : "client",
         // v0.18.2: the same batch (same posts, same versions) is delivered once a day.
@@ -139,10 +142,14 @@ export async function clientAction(
   name: string | null,
   body: string | null,
   out?: { revised?: ReviseResult },
+  onlyIds?: string[] | null,
 ): Promise<string | null> {
   if (action === "approve_all") {
     const who0 = (name || "").trim().slice(0, 80) || "Client";
-    const waiting = await prisma.contentItem.findMany({ where: { organizationId: orgId, clientId, status: "IN_REVIEW" } });
+    // v0.25.1: with ids (focused review link) only those posts — never the company's other waiting batches.
+    const waiting = await prisma.contentItem.findMany({
+      where: { organizationId: orgId, clientId, status: "IN_REVIEW", ...(onlyIds ? { id: { in: onlyIds } } : {}) },
+    });
     if (!waiting.length) return "Nothing is waiting for your approval.";
     const now = new Date();
     for (const w of waiting) {

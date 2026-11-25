@@ -37,7 +37,7 @@ import { objectivesFor, saveObjectives } from "@/lib/campaigns/objectives";
 import {
   addEvent, alertTeam, destinationsOf, esc, notifyReadyForPublishing, sendMail, validatorOf, getSettings, getTarget, LINKEDIN_MAX, MEDIA_SELECT, reviewToken, reviewUrl, scheduleItem, xLength, xMax,
 } from "@/lib/publishing";
-import { clientSubject, publishLink } from "@/lib/publishing-mail";
+import { clientSubject, postsDigestHtml, publishLink } from "@/lib/publishing-mail";
 import { submitForReview } from "@/lib/publishing-review";
 import { aboutOf } from "@/lib/reports/ops/intelligence";
 import { clean, fitTo } from "@/lib/x-fit";
@@ -545,14 +545,13 @@ async function submitMonth(orgId: string, s: AutopilotSettings, w: PlanWindow): 
     const link = focusedReviewUrl(reviewUrl(await reviewToken(orgId, clientId)), { batch: `${c.name} — ${w.label} (Autopilot)` });
     const v = await validatorOf(orgId, clientId);
     const hi = v.name ? `Hi ${esc(v.name.split(/\s+/)[0])},` : "Hello,";
-    const list = (await prisma.contentItem.findMany({
+    const posts = (await prisma.contentItem.findMany({
       where: { organizationId: orgId, clientId, createdBy: AUTOPILOT, status: "IN_REVIEW", scheduledAt: { gte: w.from, lt: w.to } },
       select: { title: true, text: true, scheduledAt: true },
       orderBy: { scheduledAt: "asc" },
     }))
-      .slice(0, 31)
-      .map((i) => `<li style="margin:3px 0"><span style="color:#666">${esc(i.scheduledAt ? i.scheduledAt.toLocaleDateString("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric" }) : "")}</span> — ${esc((i.title || i.text).split("\n")[0].slice(0, 110))}</li>`)
-      .join("");
+      .slice(0, 31);
+    const list = postsDigestHtml(posts); // v0.23.2: full text of each post in the client email
     // v0.23.1: ONE PUB-103 per client per month (Resend 2026-11-17/18: Altavia got it twice).
     // Durable marker monthly_sent:<YYYY-MM>:<client> + Idempotency-Key publish-monthly-<client>-<YYYY-MM>.
     // Posts Autopilot adds to the month later are on the same review page; no new month email.
@@ -561,7 +560,7 @@ async function submitMonth(orgId: string, s: AutopilotSettings, w: PlanWindow): 
       clientSubject(c.name, v.isTeam ? null : v.name, w.label),
       `<p>${hi}</p>
        <p>The <b>${esc(w.label)}</b> content of <b>${esc(c.name)}</b> is ready for your validation — ${n} posts, one per day (text, X version and picture):</p>
-       <ul>${list}</ul>
+       ${list}
        <p>Read the month, comment, ask for changes or press <b>Approve all</b>. ${c.clientType === "CAMPAIGN" ? "Nothing is published before you approve it." : `Anything not answered is <b>approved automatically on ${esc(deadlineTxt)}</b> (New York).`}
        When it is validated, social@gershonconsulting.com is told it is ready for publishing.</p>
        ${skipped.length ? `<p style="color:#b45309;font-size:13px">Not sent: ${esc(skipped.slice(0, 5).join(" · "))}</p>` : ""}`,

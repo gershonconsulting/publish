@@ -74,3 +74,22 @@ export function lastSubmitted(items: FocusItem[]): number {
   for (const i of items) for (const c of i.comments) if (c.kind === "submitted") t = Math.max(t, new Date(c.createdAt).getTime() || 0);
   return t;
 }
+
+/**
+ * v0.28.0 — what the review link shows (Olivier 2026-11-25, Altavia): "uniquement les posts
+ * sélectionnés qui soient réellement envoyés … Actuellement ça affiche même les posts déjà
+ * diffusés du mois précédent."
+ * - Link from an email (batch / post): exactly those posts, nothing else of the company.
+ * - Bare link: the posts waiting for the client, plus the already-approved posts of the
+ *   same batches (so "3 of 5 approved" stays true).
+ * - Never a post that already went out (PUBLISHED / PARTIAL).
+ */
+const WAITING = new Set(["IN_REVIEW", "CHANGES_REQUESTED"]);
+const OUT = new Set(["PUBLISHED", "PARTIAL"]);
+export function reviewScope<T extends FocusItem>(items: T[], focus: Focus): T[] {
+  const live = items.filter((i) => !OUT.has(i.status));
+  const s = splitFocus(live, focus);
+  if (s.active) return s.focus;
+  const openBatches = new Set(live.filter((i) => WAITING.has(i.status)).map((i) => norm(latestBatch(i.comments) || "")).filter(Boolean));
+  return live.filter((i) => WAITING.has(i.status) || openBatches.has(norm(latestBatch(i.comments) || "")));
+}

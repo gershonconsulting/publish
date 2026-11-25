@@ -32,6 +32,8 @@ export const FEATURES: Feature[] = [
     note: "Live since build 55; extension 0.3.0 on Olivier's computer, then check the first live post" },
 
   // 🟢 done (live)
+  { id: "review-link-sent-only", title: "Review link shows only the posts sent for review — never last month's published posts", version: "0.28.0", state: "done", since: "2026-11-25" },
+  { id: "deleted-day-stays-empty", title: "A deleted post's day stays empty — Autopilot / Fill the gap no longer re-create it (holidays)", version: "0.28.0", state: "done", since: "2026-11-25" },
   { id: "client-email-posts", title: "Client review emails show the posts + subject \"Publish by Gershon.AI - <Company> - <Month>\"", version: "0.25.2", state: "done", since: "2026-11-24" },
   { id: "review-link-focus", title: "Review link opens on the posts of the email (batch or post); \"Approve all\" approves only those", version: "0.25.1", state: "done", since: "2026-11-24" },
   { id: "feature-status-email", title: "Weekly feature-status email to social@ (this email)", version: "0.25.0", state: "done", since: "2026-11-24" },

@@ -19,6 +19,7 @@ export const runtime = "edge";
  * DELETE                   removes it (never touches LinkedIn or X)
  */
 import { toWorkday } from "@/lib/work-days";
+import { keepDayEmpty } from "@/lib/skip-days";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
@@ -178,5 +179,11 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   if (!item) return bad("Not found", 404);
   if (item.deliveries.some((d) => d.status === "POSTING")) return bad("It is being published right now.", 409);
   await prisma.contentItem.delete({ where: { id: item.id } });
-  return NextResponse.json({ success: true });
+  // v0.28.0 (Olivier 2026-11-25, Altavia holidays): a deleted planned post leaves its day
+  // empty on purpose — Autopilot / Fill the gap must not write a new post for it the next day.
+  let keptEmpty: string | null = null;
+  if (item.clientId && item.scheduledAt && new Date(item.scheduledAt).getTime() > Date.now() - 86400000 && item.status !== "PUBLISHED") {
+    keptEmpty = await keepDayEmpty(c.orgId, item.clientId, new Date(item.scheduledAt)).catch(() => null);
+  }
+  return NextResponse.json({ success: true, keptEmpty });
 }

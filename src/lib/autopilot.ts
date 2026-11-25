@@ -31,6 +31,7 @@
  * (the calendar already shows it there). Autopilot posts are the ones with
  * createdBy = "Autopilot". Everything is stored in OrgSetting: no schema change.
  */
+import { skipDaysOf } from "@/lib/skip-days";
 import prisma from "@/lib/db-raw";
 import { getAIBinding, getAISettings, runChat } from "@/lib/content/provider";
 import { objectivesFor, saveObjectives } from "@/lib/campaigns/objectives";
@@ -422,7 +423,9 @@ async function coveredDays(orgId: string, clientId: string, w: PlanWindow): Prom
     where: { organizationId: orgId, clientId, scheduledAt: { gte: w.from, lt: w.to }, status: { not: "FAILED" } },
     select: { scheduledAt: true },
   });
-  return new Set(rows.map((r) => etYmd(r.scheduledAt!)));
+  // v0.28.0: days whose post the team deleted stay empty (holidays…) — never refilled.
+  const skip = await skipDaysOf(orgId, clientId);
+  return new Set([...rows.map((r) => etYmd(r.scheduledAt!)), ...skip]);
 }
 
 /** Generate up to `budget` missing posts. Returns how many were written and how many are still missing. */
@@ -946,6 +949,7 @@ export async function fillGaps(orgId: string, clientId: string, days: string[], 
         select: { scheduledAt: true },
       })).map((r) => etYmd(r.scheduledAt!)),
     );
+    for (const d of await skipDaysOf(orgId, clientId)) taken.add(d); // v0.28.0: deleted on purpose
     const todo = wanted.filter((d) => !taken.has(d) && etInstant(d, s.postTime).getTime() > now + 3600000);
     const chunk = todo.slice(0, Math.max(1, Math.min(3, budget)));
     out.remaining = todo.length;

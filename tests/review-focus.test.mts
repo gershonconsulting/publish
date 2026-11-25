@@ -57,3 +57,16 @@ test("grouped PUB-101s drop the one-post focus", () => {
   assert.equal(withoutPostFocus("https://p/review/abc?post=x1&b=2"), "https://p/review/abc?b=2");
   assert.equal(withoutPostFocus("https://p/review/abc?batch=A"), "https://p/review/abc?batch=A");
 });
+
+import * as rf from "../src/lib/review-focus.ts";
+const { reviewScope } = ((rf as any).default ?? rf) as typeof rf;
+test("v0.28.0 Altavia: the link never shows last month's published posts", () => {
+  const nov = [item("n1", "PUBLISHED", sub("Altavia — November 2026", 9)), item("n2", "APPROVED", sub("Altavia — November 2026", 9))];
+  const dec = [item("d1", "IN_REVIEW", sub("Altavia — December 2026", 25)), item("d2", "APPROVED", sub("Altavia — December 2026", 25))];
+  const list = [...nov, ...dec];
+  assert.deepEqual(reviewScope(list, { batch: "Altavia — December 2026" }).map((i) => i.id), ["d1", "d2"]);
+  assert.deepEqual(reviewScope(list, {}).map((i) => i.id), ["d1", "d2"], "bare link: waiting posts + their batch only");
+  assert.deepEqual(reviewScope(list, { batch: "Gone" }).map((i) => i.id), ["d1", "d2"]);
+  assert.deepEqual(reviewScope(nov, {}).map((i) => i.id), [], "nothing waiting → nothing shown");
+  assert.deepEqual(reviewScope(list, { post: "n1" }).map((i) => i.id), ["d1", "d2"], "a published post is never shown");
+});

@@ -47,6 +47,13 @@ function parse(text: string): { change?: boolean; linkedin?: string; x?: string;
 
 /** Replace the post's picture with one made by Workers AI (same as Autopilot). */
 async function newPicture(orgId: string, contentId: string, idea: string): Promise<boolean> {
+  // v0.26.0: a real photo first, AI only when none matched.
+  const { attachBestPicture } = await import("@/lib/picture-options-db");
+  return attachBestPicture(orgId, contentId, idea).catch(() => false);
+}
+
+/** Old AI-only route (unused since v0.26.0). */
+export async function newAiPicture(orgId: string, contentId: string, idea: string): Promise<boolean> {
   const { makePicture } = await import("@/lib/autopilot");
   const { brandPaletteFor } = await import("@/lib/knowledge-base");
   const item = await prisma.contentItem.findFirst({ where: { id: contentId }, select: { clientId: true } });

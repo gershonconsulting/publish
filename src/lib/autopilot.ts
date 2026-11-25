@@ -48,6 +48,7 @@ import { sendOncePerMonth } from "@/lib/monthly-once";
 import { dbOnceStore } from "@/lib/monthly-once-db";
 import { brandPaletteFor, competitiveSnapshot, draftKB, getKB, kbForPrompt, snapshotForPrompt, type KnowledgeBase } from "@/lib/knowledge-base";
 import { focusedReviewUrl } from "@/lib/review-focus";
+import { attachBestPicture, findOptions } from "@/lib/picture-options-db";
 
 export const AUTOPILOT = "Autopilot";
 const TZ = "America/New_York";
@@ -369,7 +370,21 @@ function mediaKey(): string {
   crypto.getRandomValues(b);
   return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
+/**
+ * v0.26.0 (Olivier 2026-11-25: as few AI pictures as possible): when nobody is
+ * there to choose, the best REAL photo is attached; AI only if none is found.
+ */
 async function attachPicture(orgId: string, contentId: string, idea: string): Promise<boolean> {
+  return attachBestPicture(orgId, contentId, idea).catch(() => false);
+}
+
+/** v0.26.0: the team chooses — only get the 3 options ready (real photos first). */
+async function prepareOptions(orgId: string, contentId: string): Promise<void> {
+  await findOptions(orgId, contentId).catch(() => null);
+}
+
+/** Old AI-only route, kept for reference / fallback inside attachBestPicture. */
+export async function attachAiPicture(orgId: string, contentId: string, idea: string): Promise<boolean> {
   const item = await prisma.contentItem.findFirst({ where: { id: contentId }, select: { clientId: true } });
   const pic = await makePicture(idea, await brandPaletteFor(orgId, item?.clientId).catch(() => ""));
   if (!pic) return false;
@@ -446,7 +461,10 @@ async function generate(orgId: string, s: AutopilotSettings, w: PlanWindow, budg
         },
       });
       await addEvent(orgId, item.id, 1, "comment", "team", AUTOPILOT, `Written by Autopilot for ${chunk[i]}. Picture idea: ${d.image}`);
-      if (!(await attachPicture(orgId, item.id, d.image || d.title || c.name))) pictureFailures++;
+      // v0.26.0 semi mode: the team picks 1 of 3 pictures before the client sees it.
+      if (s.mode === "auto") {
+        if (!(await attachPicture(orgId, item.id, d.image || d.title || c.name))) pictureFailures++;
+      } else await prepareOptions(orgId, item.id);
       written++;
       missing--;
     }
@@ -498,9 +516,9 @@ async function teamCheck(orgId: string, s: AutopilotSettings, w: PlanWindow): Pr
     const ok = await alertTeam(
       orgId,
       `Autopilot: ${c.name} — ${w.label} to check before the client`,
-      `<p>Autopilot wrote the <b>${esc(w.label)}</b> content of <b>${esc(c.name)}</b> — ${mine.length} posts, Monday to Friday (text, X version, picture, company tag):</p>
+      `<p>Autopilot wrote the <b>${esc(w.label)}</b> content of <b>${esc(c.name)}</b> — ${mine.length} posts, Monday to Friday (text, X version, company tag). Each post has 3 picture options ready — real photos first:</p>
        <ul>${list}</ul>
-       <p><b>Nothing has been sent to ${c.clientType === "CAMPAIGN" ? "the client" : "anyone"}.</b> Check and edit the posts, then press <b>Send for review</b> in Content &amp; review when they are good.</p>`,
+       <p><b>Nothing has been sent to ${c.clientType === "CAMPAIGN" ? "the client" : "anyone"}.</b> Check and edit the posts, <b>choose 1 of the 3 pictures on each</b>, then press <b>Send for review</b> in Content &amp; review when they are good.</p>`,
       "AUTOPILOT_TEAM_CHECK",
       { href: publishLink(`/publishing?client=${c.id}`), label: `Check ${c.name} in Publish` },
     );
@@ -814,8 +832,10 @@ async function runStepLocked(orgId: string, budget: number, now: Date): Promise<
   base.written = g.written;
   base.remaining = g.missing;
   base.errors = g.errors;
-  if (!g.written) base.picturesFixed = await fixPictures(orgId, 2);
-  const noPicture = await prisma.contentItem.count({ where: { organizationId: orgId, createdBy: AUTOPILOT, status: "DRAFT", media: { none: {} }, scheduledAt: { gte: w.from, lt: w.to } } });
+  // v0.26.0: in semi mode the team chooses the pictures — nothing to fix, and a
+  // missing picture does not hold back the team email.
+  if (!g.written && s.mode === "auto") base.picturesFixed = await fixPictures(orgId, 2);
+  const noPicture = s.mode !== "auto" ? 0 : await prisma.contentItem.count({ where: { organizationId: orgId, createdBy: AUTOPILOT, status: "DRAFT", media: { none: {} }, scheduledAt: { gte: w.from, lt: w.to } } });
   base.remaining += noPicture > 0 && !g.written && !base.picturesFixed ? 0 : noPicture;
 
   // Month complete and every post has its picture → one review email.
@@ -956,7 +976,7 @@ export async function fillGaps(orgId: string, clientId: string, days: string[], 
         },
       });
       await addEvent(orgId, item.id, 1, "comment", "team", INTELLIGENCE, `AI draft (Cloudflare Workers AI) written by Intelligence to fill the empty posting day ${chunk[i]}. Review before submitting. Picture idea: ${d.image}`);
-      await attachPicture(orgId, item.id, d.image || d.title || c.name).catch(() => false);
+      await prepareOptions(orgId, item.id); // v0.26.0: the team picks 1 of 3
       out.written++;
       out.remaining--;
       out.items.push({ id: item.id, day: chunk[i], title: d.title || "" });

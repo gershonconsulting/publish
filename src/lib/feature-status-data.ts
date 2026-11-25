@@ -24,6 +24,8 @@ export const FEATURES: Feature[] = [
     note: "LinkedIn page number + X handle still to set" },
 
   // 🟠 pending validation
+  { id: "picture-options", title: "3 picture options per post — real photos first, AI only when nothing matched", version: "0.26.0", state: "validation", since: "2026-11-25",
+    note: "Team picks 1 of 3 before sending for validation; better photos once a Pexels API key is added (PEXELS_API_KEY)" },
   { id: "company-tag-browser", title: "Real @company tag when posting through the Chrome extension", version: "0.24.0", state: "validation", since: "2026-11-24",
     note: "Live since build 55; extension 0.3.0 on Olivier's computer, then check the first live post" },
 

@@ -1,5 +1,15 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-25 (v0.25.2 client emails show the posts + subject "Publish by Gershon.AI")
+Last updated: 2026-11-25 (v0.26.0 3 picture options, real photos first)
+
+## v0.26.0 — 3 picture options per post, real photos first (Olivier 2026-11-25: "not satisfied with the pictures … offer the user 3 options of as less as possible AI generated pictures … the user will select one before submitting for validation")
+- ✅ Post panel → "Choose the picture (3 options)": 3 cards, each labelled Real photo · <source> (credit + licence link) or AI-generated; "3 others"; own search words
+- ✅ Sources best first: Pexels (only if env PEXELS_API_KEY) → Openverse StockSnap/rawpixel CC0 (shorter searches) → Openverse Flickr/Wikimedia (commercial use) → Workers AI only for empty slots. Logos/stickers/vectors skipped
+- ✅ Options kept in org_settings pic_options:<postId> (no schema change); choice logged on the post with the credit
+- ✅ Autopilot semi mode + Fill the gap: no AI picture attached any more — the 3 options are prepared, the team picks before "Send for review" (requireImage still blocks review without one). Team email says so
+- ✅ No one to choose (Autopilot auto mode, client asks for another picture): best real photo attached, AI only as last resort
+- ✅ lib/picture-options.ts (pure, 8 tests), lib/picture-options-db.ts, API /api/publishing/content/:id/picture-options; tests 163/163, tsc clean, next build OK
+- ❌ Without a Pexels key the real-photo choice is thin for niche topics (biotech, cyber) → AI fills; add PEXELS_API_KEY to the Pages project
+
 
 ## v0.25.2 (was PR #40 v0.23.2) — client review emails show the posts; new subject (Olivier 2026-11-23)
 - ✅ "No content in the email!": PUB-102 (batch) and PUB-103 (Autopilot month) listed only titles like "10-12" → now each post's day (New York) + full text (lib/publishing-mail postsDigestHtml)

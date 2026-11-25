@@ -7,6 +7,7 @@
  */
 
 import { callApi } from "@/lib/api-call";
+import { PictureOptions } from "@/components/publishing/picture-options";
 import { useCallback, useEffect, useState } from "react";
 import { CalendarDays, Check, Copy, ExternalLink, Loader2, MessageSquare, RotateCcw, Send, Trash2, Undo2, X } from "lucide-react";
 import {
@@ -216,6 +217,15 @@ export function ItemPanel({
               ))}
               {editable && <PicturePicker onFiles={addPictures} disabled={busy} replace={(item.media?.length ?? 0) > 0} />}
             </div>
+            {editable && (
+              <PictureOptions
+                key={`${id}-${item.media?.[0]?.id || "none"}`}
+                itemId={id}
+                hasPicture={(item.media?.length ?? 0) > 0}
+                disabled={busy}
+                onChosen={async () => { await load(); onChanged(); }}
+              />
+            )}
             {editable && item.approvedAt && (item.media?.length ?? 0) > 0 && (
               <div className="text-[11px] text-amber-700 mt-1">Changing the picture makes a new version that needs approving again.</div>
             )}

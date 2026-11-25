@@ -176,6 +176,17 @@ async function store(orgId: string, contentId: string, o: PictureOption, pic: { 
   });
 }
 
+/** v0.27.0: the bytes of every option currently shown (to send them to the client to choose). */
+export async function optionsBytes(orgId: string, itemId: string): Promise<{ o: PictureOption; dataB64: string; mime: string }[]> {
+  const c = await readCache(orgId, itemId);
+  const out: { o: PictureOption; dataB64: string; mime: string }[] = [];
+  for (const o of c?.options || []) {
+    const pic = await download(o);
+    if (pic) out.push({ o, ...pic });
+  }
+  return out;
+}
+
 /** The team picked one of the 3: it becomes the post's picture. */
 export async function chooseOption(orgId: string, itemId: string, optionId: string, by: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const item = await prisma.contentItem.findFirst({ where: { id: itemId, organizationId: orgId }, include: { deliveries: true } });

@@ -8,6 +8,7 @@
 
 import { callApi } from "@/lib/api-call";
 import { PictureOptions } from "@/components/publishing/picture-options";
+import { ClientPictureChoices } from "@/components/publishing/client-picture-choices";
 import { useCallback, useEffect, useState } from "react";
 import { CalendarDays, Check, Copy, ExternalLink, Loader2, MessageSquare, RotateCcw, Send, Trash2, Undo2, X } from "lucide-react";
 import {
@@ -28,6 +29,7 @@ export function ItemPanel({
 }) {
   const [item, setItem] = useState<Item | null>(null);
   const [reviewUrl, setReviewUrl] = useState<string | null>(null);
+  const [choicesKey, setChoicesKey] = useState(0); // v0.27.0: reload the client-choice pictures
   const [text, setText] = useState("");
   const [textX, setTextX] = useState("");
   const [title, setTitle] = useState("");
@@ -201,7 +203,7 @@ export function ItemPanel({
           <div>
             <div className="text-[11px] font-medium text-gray-600 mb-1">
               Picture — one per post, the same on LinkedIn and X
-              {limits.requireImage && !(item.media?.length) && <span className="text-orange-600"> · required before review or scheduling</span>}
+              {limits.requireImage && !(item.media?.length) && <span className="text-orange-600"> · required before review or scheduling — or load pictures for the client to choose</span>}
             </div>
             <div className="flex flex-wrap gap-2">
               {(item.media || []).map((m) => (
@@ -224,8 +226,10 @@ export function ItemPanel({
                 hasPicture={(item.media?.length ?? 0) > 0}
                 disabled={busy}
                 onChosen={async () => { await load(); onChanged(); }}
+                onSentToClient={() => setChoicesKey((k) => k + 1)}
               />
             )}
+            {editable && <ClientPictureChoices itemId={id} disabled={busy} reloadKey={choicesKey} onChanged={onChanged} />}
             {editable && item.approvedAt && (item.media?.length ?? 0) > 0 && (
               <div className="text-[11px] text-amber-700 mt-1">Changing the picture makes a new version that needs approving again.</div>
             )}

@@ -17,6 +17,8 @@ type Item = {
   version: number; approvedAt: string | null; approvedBy: string | null; updatedAt: string; comments: Comment[];
   deliveries: { platform: string; status: string; postUrl: string | null; postedAt: string | null }[];
   media: { id: string; key: string; position: number; width: number | null; height: number | null }[];
+  /** v0.27.0: pictures the client chooses from (one becomes the post's picture). */
+  pictureChoices?: { id: string; width: number | null; height: number | null; url: string }[];
 };
 type Data = { client: string; logoUrl: string | null; agency: string; items: Item[] };
 
@@ -152,7 +154,7 @@ function ApproveAll({ ids, token, name, onDone }: { ids: string[]; token: string
       const r = await fetch(`/api/review/${token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "approve_all", name, ids }) });
       const j = await r.json();
       if (!j?.success) throw new Error(j?.error || "Could not approve.");
-      setMsg("All approved — thank you.");
+      setMsg(j.note || "All approved — thank you.");
       onDone();
     } catch (e) { setMsg(e instanceof Error ? e.message : "Could not approve."); }
     setBusy(false);
@@ -176,6 +178,19 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const nets = i.platforms.split(",");
+
+  const choices = i.pictureChoices || [];
+  async function choosePicture(choiceId: string) {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch(`/api/review/${token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contentId: i.id, action: "choose_picture", name, body: choiceId }) });
+      const j = await r.json();
+      if (!j?.success) throw new Error(j?.error || "Could not choose this picture.");
+      setMsg("Picture chosen — you can approve the post now.");
+      onDone();
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Could not choose this picture."); }
+    setBusy(false);
+  }
 
   async function send(action: "comment" | "request_changes" | "approve") {
     if (action !== "approve" && !body.trim()) { setMsg(action === "request_changes" ? "Tell us what to change." : "Write a comment first."); return; }
@@ -209,6 +224,27 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
         {nets.includes("LINKEDIN") && <Preview net="LinkedIn" color="#0A66C2" text={i.text} media={i.media} compact={compact} />}
         {nets.includes("TWITTER") && (!compact || !nets.includes("LINKEDIN")) && <Preview net="X" color="#000" text={i.textX?.trim() || i.text} media={i.media} compact={compact} />}
       </div>
+      {choices.length > 0 && (actionable || i.status === "CHANGES_REQUESTED") && (
+        <div className="px-4 pb-3">
+          <div className="rounded-lg border-2 border-violet-200 bg-violet-50 p-3">
+            <div className="text-sm font-semibold text-gray-900 mb-1">Choose the picture for this post</div>
+            <p className="text-[11px] text-gray-600 mb-2">Pick one of these {choices.length} — it will be published with the post. Then approve.</p>
+            <div className="grid grid-cols-3 gap-2">
+              {choices.map((c, n) => (
+                <div key={c.id} className="flex flex-col">
+                  <a href={c.url} target="_blank" rel="noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={c.url} alt={`Picture ${n + 1}`} className="w-full aspect-[4/3] object-cover rounded border border-gray-200 bg-white" />
+                  </a>
+                  <button disabled={busy} onClick={() => choosePicture(c.id)} className="mt-1 text-xs px-2 py-1.5 rounded-lg bg-violet-700 text-white disabled:opacity-50">
+                    Choose picture {n + 1}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {i.deliveries.some((d) => d.postUrl) && (
         <div className="px-4 pb-3 flex gap-3 text-xs">
           {i.deliveries.filter((d) => d.postUrl).map((d) => (
@@ -250,7 +286,7 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
               <textarea id={`c-${i.id}`} value={body} onChange={(e) => setBody(e.target.value)} rows={3} placeholder="Type your comment here…" className="w-full text-sm border border-gray-300 rounded-lg p-2 bg-white" />
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 {actionable && (
-                  <button disabled={busy} onClick={() => send("approve")} className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-emerald-600 rounded-lg disabled:opacity-50">
+                  <button disabled={busy || choices.length > 0} title={choices.length ? "Choose the picture first" : undefined} onClick={() => send("approve")} className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-emerald-600 rounded-lg disabled:opacity-50">
                     <Check size={14} /> Approve
                   </button>
                 )}

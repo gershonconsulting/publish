@@ -24,8 +24,10 @@ export const FEATURES: Feature[] = [
     note: "LinkedIn page number + X handle still to set" },
 
   // 🟠 pending validation
+  { id: "client-picture-choice", title: "Client chooses the picture — team loads up to 3, client picks one on the review link", version: "0.27.0", state: "validation", since: "2026-11-25",
+    note: "Approve is blocked until the client picks; \"Approve all\" skips posts still waiting for a picture choice" },
   { id: "picture-options", title: "3 picture options per post — real photos first, AI only when nothing matched", version: "0.26.0", state: "validation", since: "2026-11-25",
-    note: "Team picks 1 of 3 before sending for validation; better photos once a Pexels API key is added (PEXELS_API_KEY)" },
+    note: "Live build 60 (2026-11-25). Pexels has paused new API keys — Openverse stock + AI fallback for now" },
   { id: "company-tag-browser", title: "Real @company tag when posting through the Chrome extension", version: "0.24.0", state: "validation", since: "2026-11-24",
     note: "Live since build 55; extension 0.3.0 on Olivier's computer, then check the first live post" },
 

@@ -16,6 +16,8 @@ import { markSent } from "@/lib/mail-burst";
 import { mailIdempotencyKey, sortedIds } from "@/lib/mail-dedupe";
 import { claimAnnouncement, releaseAnnouncement } from "@/lib/monthly-once-db";
 import { focusedReviewUrl } from "@/lib/review-focus";
+import { choiceCount, choicesFor, clientChoosePicture } from "@/lib/picture-choices";
+import { approveAllNote, approveBlock, pictureCount } from "@/lib/picture-choices-model";
 
 /** Default batch name, CloudCampaign-style: "<Company> — <Month YYYY>". */
 export function batchName(client: string, when = new Date()): string {
@@ -32,7 +34,8 @@ export async function submitForReview(
   if (!item) return "Content not found.";
   if (!item.clientId) return "Pick the client first — the review goes to their reviewer.";
   if (!["DRAFT", "CHANGES_REQUESTED", "IN_REVIEW"].includes(item.status)) return "This content is already approved.";
-  const problems = textProblems(item, await getSettings(orgId), await mediaCount(item.id));
+  // v0.27.0: pictures loaded for the client to choose from count as the picture.
+  const problems = textProblems(item, await getSettings(orgId), pictureCount(await mediaCount(item.id), await choiceCount(orgId, item.id)));
   if (problems.length) return problems.join(" ");
 
   // v0.22.0: the company tag (@) is in the text the reviewer approves.
@@ -130,7 +133,7 @@ export async function submitBatch(
   return { sent, skipped, batch, emailed };
 }
 
-export type ClientAction = "comment" | "request_changes" | "approve" | "approve_all";
+export type ClientAction = "comment" | "request_changes" | "approve" | "approve_all" | "choose_picture";
 
 export async function clientAction(
   orgId: string,
@@ -139,7 +142,7 @@ export async function clientAction(
   action: ClientAction,
   name: string | null,
   body: string | null,
-  out?: { revised?: ReviseResult },
+  out?: { revised?: ReviseResult; note?: string | null },
   onlyIds?: string[] | null,
 ): Promise<string | null> {
   if (action === "approve_all") {
@@ -150,11 +153,17 @@ export async function clientAction(
     });
     if (!waiting.length) return "Nothing is waiting for your approval.";
     const now = new Date();
-    for (const w of waiting) {
+    // v0.27.0: a post whose picture the client still has to choose is not approved by "Approve all".
+    const pending = await choicesFor(orgId, waiting.map((w) => w.id));
+    const toChoose = waiting.filter((w) => pending[w.id]?.length);
+    const ok = waiting.filter((w) => !pending[w.id]?.length);
+    if (!ok.length) return approveAllNote(0, toChoose.length);
+    for (const w of ok) {
       await prisma.contentItem.update({ where: { id: w.id }, data: { status: "APPROVED", approvedAt: now, approvedBy: who0, approvedRole: "client" } });
       await addEvent(orgId, w.id, w.version, "approved", "client", who0, "Approved with “Approve all”");
     }
-    await notifyReadyForPublishing(orgId, waiting.map((w) => w.id), who0, "“Approve all”");
+    await notifyReadyForPublishing(orgId, ok.map((w) => w.id), who0, "“Approve all”");
+    if (out) out.note = approveAllNote(ok.length, toChoose.length);
     return null;
   }
   const item = await prisma.contentItem.findFirst({ where: { id: itemId, organizationId: orgId, clientId } });
@@ -194,8 +203,14 @@ export async function clientAction(
       [item.id, item.version, text]);
     return null;
   }
+  if (action === "choose_picture") {
+    if (!["IN_REVIEW", "CHANGES_REQUESTED"].includes(item.status)) return "This post isn't waiting for your review.";
+    return clientChoosePicture(orgId, item.id, text, who);
+  }
   if (action === "approve") {
     if (item.status !== "IN_REVIEW") return "This post isn't waiting for your review.";
+    const block = approveBlock(await choiceCount(orgId, item.id));
+    if (block) return block;
     await prisma.contentItem.update({
       where: { id: item.id },
       data: { status: "APPROVED", approvedAt: new Date(), approvedBy: who, approvedRole: "client" },

@@ -1,5 +1,14 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-25 (v0.26.0 3 picture options, real photos first)
+Last updated: 2026-11-25 (v0.27.0 client chooses the picture)
+
+## v0.27.0 — the client chooses the picture (Olivier 2026-11-25: "Give us the option to load 3 pictures for the client to validate")
+- ✅ Post panel → "Let the client choose": load up to 3 pictures (files), or "Let the client choose among these 3" from the picture options
+- ✅ Review link: "Choose the picture for this post" with 3 pictures; the chosen one becomes the post's picture (others dropped), logged in the thread
+- ✅ Approve blocked until a picture is chosen; "Approve all" approves the others and says how many still need a picture choice
+- ✅ Pictures to choose count as "the picture" for Send for review (requireImage)
+- ✅ Stored in org_settings pic_choices:<postId> (no schema change); public bytes at /api/review/<token>/picture/<post>/<id> (token-scoped)
+- ✅ lib/picture-choices-model.ts (pure, 5 tests); tests 168/168, tsc clean, next build OK
+- ❌ Pexels: new API keys paused by Pexels (2026-11-25) — v0.26.0 runs on Openverse + AI fallback
 
 ## v0.26.0 — 3 picture options per post, real photos first (Olivier 2026-11-25: "not satisfied with the pictures … offer the user 3 options of as less as possible AI generated pictures … the user will select one before submitting for validation")
 - ✅ Post panel → "Choose the picture (3 options)": 3 cards, each labelled Real photo · <source> (credit + licence link) or AI-generated; "3 others"; own search words

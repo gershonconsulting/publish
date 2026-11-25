@@ -9,7 +9,7 @@ import { callApi } from "@/lib/api-call";
 
 type Opt = { id: string; label: string; thumb: string; title: string; credit: string; license: string; page: string; ai: boolean };
 
-export function PictureOptions({ itemId, hasPicture, disabled, onChosen }: { itemId: string; hasPicture: boolean; disabled?: boolean; onChosen: () => void }) {
+export function PictureOptions({ itemId, hasPicture, disabled, onChosen, onSentToClient }: { itemId: string; hasPicture: boolean; disabled?: boolean; onChosen: () => void; onSentToClient?: () => void }) {
   const [open, setOpen] = useState(!hasPicture);
   const [opts, setOpts] = useState<Opt[] | null>(null);
   const [query, setQuery] = useState("");
@@ -37,6 +37,16 @@ export function PictureOptions({ itemId, hasPicture, disabled, onChosen }: { ite
     if (!j.success) return setErr((j.error as string) || "Could not use this picture.");
     setOpen(false);
     onChosen();
+  }
+
+  // v0.27.0: the 3 options go to the client, who picks one when validating.
+  async function sendToClient() {
+    setBusy(true);
+    setErr(null);
+    const j = await callApi(`/api/publishing/content/${itemId}/picture-choices`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fromOptions: true }) });
+    setBusy(false);
+    if (!j.success) return setErr((j.error as string) || "Could not load them for the client.");
+    onSentToClient?.();
   }
 
   if (!open) {
@@ -84,6 +94,11 @@ export function PictureOptions({ itemId, hasPicture, disabled, onChosen }: { ite
             </div>
           ))}
         </div>
+      )}
+      {!busy && opts && opts.length > 1 && onSentToClient && (
+        <button type="button" disabled={busy || disabled} onClick={sendToClient} className="mt-2 w-full text-xs px-2 py-1.5 rounded border border-violet-300 bg-violet-50 text-violet-800">
+          Let the client choose among these {opts.length}
+        </button>
       )}
       {err && <div className="text-[11px] text-red-600 mt-1">{err}</div>}
     </div>

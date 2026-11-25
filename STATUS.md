@@ -1,5 +1,11 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-25 (v0.27.0 client chooses the picture)
+Last updated: 2026-11-25 (v0.27.1 Unsplash + Pixabay photo sources)
+
+## v0.27.1 — all free photo libraries (Olivier 2026-11-25: "What about all options unsplash pixabay etc")
+- ✅ Picture options search Unsplash, Pexels, Pixabay (each only when its key is set) + Openverse; best 3 real photos across all, AI only for empty slots
+- ✅ Unsplash download_location is called when a photo is used (Unsplash API guidelines); photographer credit kept
+- ✅ tests 169/169, tsc clean, next build OK; no schema change
+- ❌ Keys to add as Cloudflare Pages env (project gershon-publish, production): UNSPLASH_ACCESS_KEY, PIXABAY_API_KEY — Ariel (Claude may not type keys into dashboards); PEXELS_API_KEY when Pexels reopens
 
 ## v0.27.0 — the client chooses the picture (Olivier 2026-11-25: "Give us the option to load 3 pictures for the client to validate")
 - ✅ Post panel → "Let the client choose": load up to 3 pictures (files), or "Let the client choose among these 3" from the picture options

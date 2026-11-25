@@ -16,6 +16,7 @@ import { resolveReviewToken } from "@/lib/publishing";
 import { clientAction, type ClientAction } from "@/lib/publishing-review";
 import { clientVisibleEvents } from "@/lib/review-thread";
 import { choicesFor } from "@/lib/picture-choices";
+import { readFocus, reviewScope } from "@/lib/review-focus";
 
 const ITEM_SELECT = {
   id: true, title: true, text: true, textX: true, platforms: true, status: true, scheduledAt: true, version: true,
@@ -29,7 +30,7 @@ const ITEM_SELECT = {
   media: { select: { id: true, key: true, position: true, width: true, height: true }, orderBy: { position: "asc" } },
 } satisfies Prisma.ContentItemSelect;
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
   const r = await resolveReviewToken(token);
   if (!r) return NextResponse.json({ success: false, error: "This review link is not valid any more." }, { status: 404 });
@@ -56,7 +57,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
       take: 100,
     }),
   ]);
-  const items = [...waiting, ...history];
+  // v0.28.0: only the posts the email was about (or, on a bare link, the ones waiting) —
+  // never last month's published posts.
+  const items = reviewScope([...waiting, ...history], readFocus(new URL(req.url).searchParams));
   // v0.16.2: the previous comment exchange is internal — never sent to the reviewer.
   // v0.27.0: pictures the client chooses from (waiting posts only; bytes served by …/picture/<post>/<id>).
   const choices = await choicesFor(r.orgId, waiting.map((w) => w.id));

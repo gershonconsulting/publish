@@ -1,5 +1,12 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-25 (v0.27.0 client chooses the picture)
+Last updated: 2026-11-25 (v0.28.0 review link = sent posts only; deleted days stay empty)
+
+## v0.28.0 — Altavia feedback (Olivier 2026-11-25)
+- ✅ Review link shows only the posts of the email (batch / post); bare link = waiting posts + their batch. No "other posts" toggle, never PUBLISHED/PARTIAL posts (lib/review-focus reviewScope, applied in /api/review/:token)
+- ✅ Deleting a planned post records its NY day in org_settings skip_days:<clientId>; Autopilot (coveredDays), Fill the gap (fillGaps + gaps list) skip it — holidays no longer refilled (lib/skip-days*.ts)
+- ✅ tests 172/172, tsc clean, next build OK; no schema change
+- ❌ Days deleted BEFORE v0.28.0 are not remembered — delete those posts once more
+- ❌ No UI yet to "release" a kept-empty day (releaseDays exists) — a post created by hand on that day works anyway
 
 ## v0.27.0 — the client chooses the picture (Olivier 2026-11-25: "Give us the option to load 3 pictures for the client to validate")
 - ✅ Post panel → "Let the client choose": load up to 3 pictures (files), or "Let the client choose among these 3" from the picture options

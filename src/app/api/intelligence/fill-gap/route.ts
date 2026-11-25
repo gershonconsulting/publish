@@ -10,13 +10,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { publishingCaller } from "@/lib/publishing-auth";
 import { publishCompanies, runways } from "@/lib/publish-dashboard";
 import { fillGaps } from "@/lib/autopilot";
+import { skipDaysOf } from "@/lib/skip-days";
 
 async function gapsOf(orgId: string, clientId: string) {
   const cs = await publishCompanies(orgId, clientId);
   const co = cs.find((x) => x.id === clientId);
   if (!co) return null;
   const [r] = await runways(orgId, [co]);
-  return { company: co.name, gaps: r?.gaps ?? [], perWeek: r?.perWeek ?? null };
+  // v0.28.0: a day the team emptied by deleting its post is not a gap.
+  const skip = await skipDaysOf(orgId, clientId);
+  return { company: co.name, gaps: (r?.gaps ?? []).filter((d) => !skip.has(d)), perWeek: r?.perWeek ?? null };
 }
 
 export async function GET(req: NextRequest) {

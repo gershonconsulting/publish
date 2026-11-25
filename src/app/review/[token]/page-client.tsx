@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, CheckCheck, Loader2, MessageSquare, PencilLine } from "lucide-react";
 import { ReviewBadge } from "@/components/publishing/shared";
-import { approvableIds, lastSubmitted, latestBatch, splitFocus } from "@/lib/review-focus";
+import { approvableIds, lastSubmitted, latestBatch } from "@/lib/review-focus";
 
 type Comment = { id: string; authorName: string | null; authorRole: "team" | "client"; kind: string; body: string | null; version: number; createdAt: string };
 type Item = {
@@ -42,19 +42,22 @@ function fmt(iso: string | null) {
 
 export function ReviewClient({ token, focusBatch = null, focusPost = null }: { token: string; focusBatch?: string | null; focusPost?: string | null }) {
   const [data, setData] = useState<Data | null>(null);
-  const [showAll, setShowAll] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [name, setName] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch(`/api/review/${token}`, { cache: "no-store" });
+      const q = new URLSearchParams();
+      if (focusPost) q.set("post", focusPost);
+      else if (focusBatch) q.set("batch", focusBatch);
+      const qs = q.toString();
+      const r = await fetch(`/api/review/${token}${qs ? `?${qs}` : ""}`, { cache: "no-store" });
       const j = await r.json();
       // v4.59.0 audit: clear a stale error once a reload succeeds.
       if (j?.success) { setData(j.data); setErr(null); }
       else setErr(j?.error || "This review link is not valid.");
     } catch { setErr("Could not load."); }
-  }, [token]);
+  }, [token, focusBatch, focusPost]);
 
   useEffect(() => {
     void load();
@@ -71,12 +74,9 @@ export function ReviewClient({ token, focusBatch = null, focusPost = null }: { t
   if (err && !data) return <Center><p className="text-gray-700">{err}</p></Center>;
   if (!data) return <Center><Loader2 className="animate-spin text-gray-400" /></Center>;
 
-  // v0.25.1: the link from an email opens on the posts that email was about (batch or one post);
-  // the company's other posts stay one click away. "Approve all" approves only what is shown.
-  const split = splitFocus(data.items, { batch: focusBatch, post: focusPost });
-  const shown = split.active && !showAll ? split.focus : data.items;
-  const hidden = split.active && !showAll ? split.rest : [];
-  const hiddenWaiting = hidden.filter((i) => i.status === "IN_REVIEW" || i.status === "CHANGES_REQUESTED").length;
+  // v0.28.0: the API already returns only the posts of this link (the email's batch / post,
+  // or the waiting ones) — no "other posts" of the company, no published history.
+  const shown = data.items;
   const waitingIds = approvableIds(shown);
   const groups = new Map<string, Item[]>();
   for (const i of shown) {
@@ -130,13 +130,6 @@ export function ReviewClient({ token, focusBatch = null, focusPost = null }: { t
             </div>
           </section>
         ))}
-        {split.active && (
-          <div className="text-center">
-            <button onClick={() => setShowAll((v) => !v)} className="text-sm underline text-gray-600">
-              {showAll ? "Show only the posts from the email" : `Show the other ${hidden.length} post${hidden.length === 1 ? "" : "s"} of ${data.client.trim()}${hiddenWaiting ? ` (${hiddenWaiting} still waiting)` : ""}`}
-            </button>
-          </div>
-        )}
         <p className="text-[11px] text-gray-400 text-center">This private link is for {data.client} only. Nothing is published before you approve it.</p>
       </main>
     </div>

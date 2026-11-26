@@ -13,6 +13,7 @@
 import prisma from "@/lib/db-raw";
 import { addEvent, MEDIA_SELECT, markChanged } from "@/lib/publishing";
 import { aiNeeded, choiceNote, fallbackQueries, fromOpenverse, fromPexels, fromPixabay, fromUnsplash, keywordsFor, pickThree, type PictureOption } from "@/lib/picture-options";
+import { unsplashTrackUrl } from "@/lib/picture-choices-model";
 
 const UA = "GershonPublish/1.0 (+https://publish.gershon.ai)";
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -58,10 +59,11 @@ async function searchPixabay(q: string): Promise<PictureOption[]> {
 }
 
 /** Unsplash asks to be told when a photo is used (download_location). Never blocks. */
-async function trackUse(o: PictureOption): Promise<void> {
+export async function trackUse(o: { source: string; track?: string | null }): Promise<void> {
   const key = env("UNSPLASH_ACCESS_KEY");
-  if (o.source !== "unsplash" || !o.track || !key || !/^https:\/\/api\.unsplash\.com\//.test(o.track)) return;
-  await fetch(o.track, { headers: { Authorization: `Client-ID ${key}`, "Accept-Version": "v1" } }).catch(() => null);
+  const url = unsplashTrackUrl(o.source, o.track);
+  if (!url || !key) return;
+  await fetch(url, { headers: { Authorization: `Client-ID ${key}`, "Accept-Version": "v1" } }).catch(() => null);
 }
 
 async function searchOpenverse(q: string, source?: string): Promise<PictureOption[]> {
@@ -165,7 +167,7 @@ function b64(bytes: Uint8Array): string {
 }
 
 /** Download a real photo: JPEG/PNG, ≤ 5 MB. */
-async function download(o: PictureOption): Promise<{ dataB64: string; mime: string } | null> {
+async function download(o: PictureOption, opts: { track?: boolean } = {}): Promise<{ dataB64: string; mime: string } | null> {
   if (o.source === "ai") return o.dataB64 ? { dataB64: o.dataB64, mime: o.mime || "image/jpeg" } : null;
   for (const url of [o.url, o.thumb]) {
     if (!url || !/^https:\/\//.test(url)) continue;
@@ -177,7 +179,7 @@ async function download(o: PictureOption): Promise<{ dataB64: string; mime: stri
       const png = bytes[0] === 0x89 && bytes[1] === 0x50;
       const jpg = bytes[0] === 0xff && bytes[1] === 0xd8;
       if (!png && !jpg) continue;
-      await trackUse(o);
+      if (opts.track) await trackUse(o);
       return { dataB64: b64(bytes), mime: png ? "image/png" : "image/jpeg" };
     } catch {
       /* next url */
@@ -200,7 +202,11 @@ async function store(orgId: string, contentId: string, o: PictureOption, pic: { 
   });
 }
 
-/** v0.27.0: the bytes of every option currently shown (to send them to the client to choose). */
+/**
+ * v0.27.0: the bytes of every option currently shown (to send them to the client to choose).
+ * Preview bytes come from the regular image URL; Unsplash download tracking is NOT triggered here
+ * (the photo is not used yet) — it fires when the client's choice is final (clientChoosePicture).
+ */
 export async function optionsBytes(orgId: string, itemId: string): Promise<{ o: PictureOption; dataB64: string; mime: string }[]> {
   const c = await readCache(orgId, itemId);
   const out: { o: PictureOption; dataB64: string; mime: string }[] = [];
@@ -219,7 +225,7 @@ export async function chooseOption(orgId: string, itemId: string, optionId: stri
   const c = await readCache(orgId, itemId);
   const o = c?.options.find((x) => x.id === optionId);
   if (!o) return { ok: false, error: "These options expired — show the options again." };
-  const pic = await download(o);
+  const pic = await download(o, { track: true });
   if (!pic) return { ok: false, error: "That picture could not be downloaded — pick another one." };
   await store(orgId, itemId, o, pic);
   await addEvent(orgId, itemId, item.version, "comment", "team", by, choiceNote(o, by));
@@ -236,7 +242,7 @@ export async function attachBestPicture(orgId: string, itemId: string, idea: str
   if (!it) return false;
   const query = keywordsFor(idea) || "business team";
   for (const o of pickThree(await searchRealPhotos(query))) {
-    const pic = await download(o);
+    const pic = await download(o, { track: true });
     if (pic) {
       await store(orgId, itemId, o, pic);
       await addEvent(orgId, itemId, 1, "comment", "team", "Autopilot", choiceNote(o, "Autopilot"));

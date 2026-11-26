@@ -27,6 +27,7 @@ import { getCompetitorIds } from "@/lib/competitors/store";
 import { aboutOf } from "@/lib/reports/ops/intelligence";
 import { houseStyle } from "@/lib/house-style";
 import { statsForPrompt } from "@/lib/house-style-stats";
+import { cleanFolders, type ContentFolder } from "@/lib/kb-folders";
 import { EMPTY_BRAND, brandForPrompt, paletteForImage, brandFromFindings, cleanBrand, extractFromSite, findingsForPrompt, hasBrand, type Brand } from "@/lib/brand";
 
 export type { Brand } from "@/lib/brand";
@@ -45,6 +46,8 @@ export type KnowledgeBase = {
   style: { text: string; source: Source; updatedAt: string | null; takeover: string | null; habits?: string; examples?: string[] };
   /** v0.18.0 — colour codes, fonts, logo and brand rules, from the website or what the client shared (lib/brand.ts). */
   brand: Brand;
+  /** v0.29.0 — links to the client's shared folders (Drive, Dropbox, SharePoint…) the team loads content from (lib/kb-folders.ts). */
+  folders: ContentFolder[];
 };
 const EMPTY: KnowledgeBase = {
   valueProp: { text: "", source: "manual", updatedAt: null },
@@ -52,6 +55,7 @@ const EMPTY: KnowledgeBase = {
   icps: [],
   style: { text: "", source: "manual", updatedAt: null, takeover: null },
   brand: EMPTY_BRAND,
+  folders: [],
 };
 const isDay = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
 const key = (clientId: string) => `kb:${clientId}`;
@@ -69,6 +73,7 @@ export async function getKB(orgId: string, clientId: string): Promise<KnowledgeB
       icps: Array.isArray(v.icps) ? v.icps.filter((i) => i && i.name).slice(0, 12) : [],
       style: { ...EMPTY.style, ...(v.style || {}) },
       brand: cleanBrand(v.brand),
+      folders: cleanFolders(v.folders),
     };
   } catch {
     return structuredClone(EMPTY);
@@ -96,6 +101,7 @@ export async function saveKB(orgId: string, clientId: string, kb: KnowledgeBase)
       examples: (Array.isArray(kb.style?.examples) ? kb.style!.examples : []).map((x) => String(x).slice(0, 500)).slice(0, 4),
     },
     brand: cleanBrand(kb.brand),
+    folders: cleanFolders(kb.folders),
   };
   const value = JSON.stringify(clean);
   await prisma.orgSetting.upsert({

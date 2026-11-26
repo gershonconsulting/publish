@@ -4,7 +4,7 @@ export const runtime = "edge";
  *   GET  → { kb, snapshot, history } — the saved Knowledge Base + the live competitive
  *          snapshot from collected competitor posts + (v0.10.0) the company's own
  *          posts from before Gershon took over, collected by social.gershon.ai.
- *   PUT  → save { valueProp?, competitive?, icps?, style?, brand? } (edits become "manual";
+ *   PUT  → save { valueProp?, competitive?, icps?, style?, brand?, folders? } (edits become "manual";
  *          style.takeover = "YYYY-MM-DD" or null for automatic).
  *   POST { section: "valueProp"|"competitive"|"icps"|"style"|"brand"|"all", overwrite?: boolean }
  *        → draft with Intelligence.
@@ -15,6 +15,7 @@ import { publishingCaller } from "@/lib/publishing-auth";
 import { competitiveSnapshot, draftKB, getKB, saveKB, type KnowledgeBase, type Section } from "@/lib/knowledge-base";
 import { houseStyle } from "@/lib/house-style";
 import { cleanBrand } from "@/lib/brand";
+import { cleanFolders } from "@/lib/kb-folders";
 
 type Ctx = { params: Promise<{ clientId: string }> };
 
@@ -62,6 +63,8 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
       const same = JSON.stringify({ ...next, source: 0, updatedAt: 0 }) === JSON.stringify({ ...kb.brand, source: 0, updatedAt: 0 });
       if (!same) kb.brand = { ...next, updatedAt: now };
     }
+    // v0.29.0: content folder links (invalid links are dropped by cleanFolders).
+    if (Array.isArray(b.folders)) kb.folders = cleanFolders(b.folders, now);
     if (Array.isArray(b.icps)) {
       kb.icps = b.icps.map((i) => {
         const prev = kb.icps.find((p) => p.id === i.id);

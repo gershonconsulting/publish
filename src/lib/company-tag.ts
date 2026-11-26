@@ -129,3 +129,37 @@ export function liSegments(text: string, names: (string | null | undefined)[]): 
   if (last < text.length) out.push({ text: text.slice(last) });
   return out;
 }
+
+/**
+ * v0.28.2 (Olivier, 2026-11-26): a client comment "Add @Altavia" produced a
+ * new version where only the X text carried the tag. The AI rewrite is free
+ * text, so tags are checked after it, in plain code:
+ *  - every "@Name" the comment asks for, and
+ *  - every "@Name" the post already had
+ * must be in the new text. Missing ones are put back with the usual placement.
+ */
+export function mentionsIn(text: string): string[] {
+  const out: string[] = [];
+  // "@" at the start or after a non-word char (so "a@b.com" is not a tag).
+  for (const m of String(text || "").matchAll(/(?:^|[^\p{L}\p{N}_.@])@([\p{L}\p{N}_][\p{L}\p{N}_-]*[\p{L}\p{N}_]|[\p{L}\p{N}_]{2,})/gu)) {
+    const n = m[1];
+    if (!out.some((o) => o.toLowerCase() === n.toLowerCase())) out.push(n);
+  }
+  return out;
+}
+
+export function keepMentions(
+  text: string,
+  names: string[],
+  add: (t: string, name: string) => string,
+): { text: string; missing: string[] } {
+  let t = text;
+  const missing: string[] = [];
+  for (const n of names) {
+    if (hasTag(t, n)) continue;
+    const next = add(t, n);
+    if (hasTag(next, n)) t = next;
+    else missing.push(n);
+  }
+  return { text: t, missing };
+}

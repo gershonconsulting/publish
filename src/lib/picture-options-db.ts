@@ -2,7 +2,8 @@
  * v0.26.0 — 3 picture options per post (real photos first). Network + DB side
  * of lib/picture-options.ts.
  *
- * Sources, best first: Pexels (only when PEXELS_API_KEY is set) → Openverse
+ * Sources, best first: Unsplash / Pexels / Pixabay (each only when its key is set:
+ * UNSPLASH_ACCESS_KEY, PEXELS_API_KEY, PIXABAY_API_KEY) → Openverse
  * (no key: StockSnap and rawpixel CC0 stock, then Flickr/Wikimedia photos free
  * for commercial use) → Workers AI only for the slots no real photo filled.
  *
@@ -11,7 +12,7 @@
  */
 import prisma from "@/lib/db-raw";
 import { addEvent, MEDIA_SELECT, markChanged } from "@/lib/publishing";
-import { aiNeeded, choiceNote, fallbackQueries, fromOpenverse, fromPexels, keywordsFor, pickThree, type PictureOption } from "@/lib/picture-options";
+import { aiNeeded, choiceNote, fallbackQueries, fromOpenverse, fromPexels, fromPixabay, fromUnsplash, keywordsFor, pickThree, type PictureOption } from "@/lib/picture-options";
 
 const UA = "GershonPublish/1.0 (+https://publish.gershon.ai)";
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -41,6 +42,28 @@ async function searchPexels(q: string): Promise<PictureOption[]> {
   return fromPexels(await getJson(`https://api.pexels.com/v1/search?query=${encodeURIComponent(q)}&per_page=15&orientation=landscape`, { Authorization: key }));
 }
 
+/** v0.28.1: Unsplash — only when UNSPLASH_ACCESS_KEY is set. */
+async function searchUnsplash(q: string): Promise<PictureOption[]> {
+  const key = env("UNSPLASH_ACCESS_KEY");
+  if (!key) return [];
+  return fromUnsplash(await getJson(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(q)}&per_page=15&orientation=landscape&content_filter=high`, { Authorization: `Client-ID ${key}`, "Accept-Version": "v1" }));
+}
+
+/** v0.28.1: Pixabay — only when PIXABAY_API_KEY is set. */
+async function searchPixabay(q: string): Promise<PictureOption[]> {
+  const key = env("PIXABAY_API_KEY");
+  if (!key) return [];
+  const p = new URLSearchParams({ key, q: q.slice(0, 100), image_type: "photo", orientation: "horizontal", safesearch: "true", per_page: "20", order: "popular" });
+  return fromPixabay(await getJson(`https://pixabay.com/api/?${p}`));
+}
+
+/** Unsplash asks to be told when a photo is used (download_location). Never blocks. */
+async function trackUse(o: PictureOption): Promise<void> {
+  const key = env("UNSPLASH_ACCESS_KEY");
+  if (o.source !== "unsplash" || !o.track || !key || !/^https:\/\/api\.unsplash\.com\//.test(o.track)) return;
+  await fetch(o.track, { headers: { Authorization: `Client-ID ${key}`, "Accept-Version": "v1" } }).catch(() => null);
+}
+
 async function searchOpenverse(q: string, source?: string): Promise<PictureOption[]> {
   const p = new URLSearchParams({ q, page_size: "20", mature: "false" });
   if (source) p.set("source", source);
@@ -61,7 +84,7 @@ export async function searchRealPhotos(query: string): Promise<PictureOption[]> 
   const stock: PictureOption[] = [];
   const queries = fallbackQueries(query);
   for (const q of queries) {
-    const found = await Promise.all([searchPexels(q), searchOpenverse(q, "stocksnap"), searchOpenverse(q, "rawpixel")]);
+    const found = await Promise.all([searchUnsplash(q), searchPexels(q), searchPixabay(q), searchOpenverse(q, "stocksnap"), searchOpenverse(q, "rawpixel")]);
     for (const f of found) stock.push(...f);
     if (stock.length >= 6) return stock;
   }
@@ -154,6 +177,7 @@ async function download(o: PictureOption): Promise<{ dataB64: string; mime: stri
       const png = bytes[0] === 0x89 && bytes[1] === 0x50;
       const jpg = bytes[0] === 0xff && bytes[1] === 0xd8;
       if (!png && !jpg) continue;
+      await trackUse(o);
       return { dataB64: b64(bytes), mime: png ? "image/png" : "image/jpeg" };
     } catch {
       /* next url */

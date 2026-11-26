@@ -17,6 +17,9 @@
  *   version (IN_REVIEW). A draft stays a draft. Approved / scheduled /
  *   published posts are never rewritten from a comment.
  * - A comment that asks for another picture also gets a new picture.
+ * - v0.28.2: every "@tag" the comment asks for, and every "@tag" the post
+ *   already had, is checked in code after the rewrite and put back in BOTH the
+ *   LinkedIn and the X version if the AI left it out.
  */
 import prisma from "@/lib/db-raw";
 import { getAISettings, runChat } from "@/lib/content/provider";
@@ -25,6 +28,7 @@ import { aboutOf } from "@/lib/reports/ops/intelligence";
 import { clean, fitTo } from "@/lib/x-fit";
 import { stripLinks } from "@/lib/x-links";
 import { getKB, kbForPrompt } from "@/lib/knowledge-base";
+import { keepMentions, mentionsIn, withLinkedInTag, withXTag } from "@/lib/company-tag";
 
 export const INTELLIGENCE = "Intelligence";
 const TEXT_MODEL_HINT = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
@@ -116,7 +120,7 @@ export async function reviseFromComment(
     const system = `You are the senior social-media copywriter of ${company}${client?.website ? ` (${client.website})` : ""}${about ? ` — ${about}` : ""}.
 A ${by.role === "client" ? "client reviewer" : "team member"} left a comment on a post. Write the NEW VERSION of the post that does exactly what the comment asks.
 Rules:
-- Apply every instruction of the comment. Keep everything the comment does not ask to change (topic, voice, structure, hashtags) unless it must change to follow the comment.
+- Apply every instruction of the comment to BOTH the LinkedIn post and the X version (for example an @tag or a hashtag asked for goes in both). Keep everything the comment does not ask to change (topic, voice, structure, hashtags, existing @tags) unless it must change to follow the comment.
 - US English. LinkedIn post: 300-1,300 characters unless the comment asks for another length; short paragraphs; at most 2 emoji.
 - NEVER invent statistics, numbers, client names, quotes, awards, prices or results. If the comment gives facts, use them as given.
 - X version: at most ${xLimit - 10} characters including hashtags; same idea, tighter; NO links or web addresses (X charges 13x more for a post with a link).
@@ -146,12 +150,27 @@ Answer ONLY with JSON: {"change": boolean, "linkedin": string, "x": string, "ima
     const textChanged = j.change !== false && linkedin.length >= 80 && linkedin !== item.text.trim();
     if (!textChanged && !wantsPicture) return { revised: false, reason: "the comment asks for no change" };
 
-    const text = textChanged ? Array.from(linkedin).slice(0, LINKEDIN_MAX).join("") : item.text;
+    let text = textChanged ? Array.from(linkedin).slice(0, LINKEDIN_MAX).join("") : item.text;
     let textX = item.textX || "";
     if (textChanged) {
       let x = stripLinks(clean(j.x || "") || text).text || clean(j.x || "") || text;
       if (xLength(x) > xLimit) x = fitTo(x, xLimit);
       textX = x;
+    }
+
+    // v0.28.2 (Olivier, 2026-11-26): "Add @Altavia" ended up on X only. The AI's
+    // answer is not trusted for tags: put back any asked-for or existing @tag.
+    const tagsMissing: string[] = [];
+    if (textChanged) {
+      const asked = mentionsIn(ask);
+      const li = keepMentions(text, [...asked, ...mentionsIn(item.text)], (t, n) => withLinkedInTag(t, n, LINKEDIN_MAX));
+      text = li.text;
+      tagsMissing.push(...li.missing.map((n) => `@${n} (LinkedIn)`));
+      if (nets.includes("TWITTER")) {
+        const xr = keepMentions(textX, [...asked, ...mentionsIn(item.textX || "")], (t, n) => withXTag(t, n, xLimit, xLength, fitTo));
+        textX = xr.text;
+        tagsMissing.push(...xr.missing.map((n) => `@${n} (X)`));
+      }
     }
 
     let picture = false;
@@ -182,7 +201,7 @@ Answer ONLY with JSON: {"change": boolean, "linkedin": string, "x": string, "ima
       "revised",
       "team",
       INTELLIGENCE,
-      `New version ${version} written from ${by.name ? by.name + "’s" : "the"} comment${note ? ` — ${note}` : "."}${picture ? " New picture." : ""}`,
+      `New version ${version} written from ${by.name ? by.name + "’s" : "the"} comment${note ? ` — ${note}` : "."}${picture ? " New picture." : ""}${tagsMissing.length ? ` Could not fit ${tagsMissing.join(", ")}.` : ""}`,
     );
     return { revised: true, version, text, textX, picture, status };
   } catch {

@@ -61,3 +61,14 @@ test("choice note credits the photographer", () => {
   const [o] = fromOpenverse({ results: [ov("stocksnap", 1)] });
   assert.match(choiceNote(o, "Nikki"), /Nikki chose a real photo — StockSnap, by stocksnap-author-1 \(CC0\)/);
 });
+
+test("Unsplash and Pixabay answers are read, and rank first", () => {
+  const { fromUnsplash, fromPixabay } = ((m as any).default ?? m) as typeof m;
+  const us = fromUnsplash({ results: [{ id: "u1", width: 4000, height: 2600, alt_description: "office", urls: { regular: "https://images.unsplash.com/u1?w=1080", small: "https://images.unsplash.com/u1?w=400" }, links: { html: "https://unsplash.com/photos/u1", download_location: "https://api.unsplash.com/photos/u1/download" }, user: { name: "Ana" } }] });
+  assert.equal(us[0].source, "unsplash");
+  assert.equal(us[0].track, "https://api.unsplash.com/photos/u1/download");
+  const pb = fromPixabay({ hits: [{ id: 9, type: "photo", pageURL: "https://pixabay.com/photos/9", webformatURL: "https://pixabay.com/get/9_640.jpg", largeImageURL: "https://pixabay.com/get/9_1280.jpg", imageWidth: 5000, imageHeight: 3000, user: "Bo" }, { id: 10, type: "illustration", largeImageURL: "https://pixabay.com/get/10.jpg" }] });
+  assert.equal(pb.length, 1);
+  const ov = fromOpenverse({ results: [{ id: "s", url: "https://cdn.stocksnap.io/s.jpg", source: "stocksnap", width: 1600, height: 1000, category: "photograph", creator: "C" }] });
+  assert.deepEqual(pickThree([...ov, ...pb, ...us]).map((x) => x.source), ["unsplash", "pixabay", "stocksnap"]);
+});

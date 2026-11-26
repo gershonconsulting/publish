@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as m from "../src/lib/picture-choices-model.ts";
-const { addChoice, removeChoice, pictureCount, approveBlock, withoutData, approveAllNote, MAX_CHOICES } = ((m as any).default ?? m) as typeof m;
+const { addChoice, removeChoice, pictureCount, approveBlock, withoutData, approveAllNote, unsplashTrackUrl, MAX_CHOICES } = ((m as any).default ?? m) as typeof m;
 
 const c = (id: string) => ({ id, mime: "image/jpeg", dataB64: "AAAA", width: 10, height: 10, label: id, at: "2026-11-25" });
 
@@ -35,4 +35,18 @@ test("Approve all note", () => {
   assert.equal(approveAllNote(4, 0), null);
   assert.equal(approveAllNote(4, 1), "4 approved. 1 post still needs you to choose a picture.");
   assert.equal(approveAllNote(0, 2), "2 posts still need you to choose a picture.");
+});
+
+test("withoutData also hides the Unsplash track URL from the client", () => {
+  const i = withoutData({ ...c("a"), track: "https://api.unsplash.com/photos/a/download" }) as Record<string, unknown>;
+  assert.equal("track" in i, false);
+  assert.equal("dataB64" in i, false);
+});
+
+test("Unsplash download tracking only for Unsplash photos with an api.unsplash.com URL", () => {
+  const t = "https://api.unsplash.com/photos/u1/download";
+  assert.equal(unsplashTrackUrl("unsplash", t), t);
+  assert.equal(unsplashTrackUrl("pexels", t), null);
+  assert.equal(unsplashTrackUrl("unsplash", "https://evil.example.com/x"), null);
+  assert.equal(unsplashTrackUrl("unsplash", undefined), null);
 });

@@ -10,7 +10,7 @@
  *   - pickThree(): the 3 options shown — real photos first, AI only to fill a gap.
  */
 
-export type PictureSource = "pexels" | "stocksnap" | "rawpixel" | "flickr" | "wikimedia" | "openverse" | "ai";
+export type PictureSource = "unsplash" | "pixabay" | "pexels" | "stocksnap" | "rawpixel" | "flickr" | "wikimedia" | "openverse" | "ai";
 export type PictureOption = {
   id: string;
   source: PictureSource;
@@ -25,15 +25,19 @@ export type PictureOption = {
   license: string;
   /** Page of the photo, for the credit. */
   page: string;
+  /** Unsplash only: the download_location to call when the photo is used (API guidelines). */
+  track?: string;
   /** AI options only. */
   dataB64?: string;
   mime?: string;
 };
 
 /** Best looking free stock first; AI always last. */
-export const SOURCE_RANK: Record<PictureSource, number> = { pexels: 0, stocksnap: 1, rawpixel: 2, wikimedia: 3, flickr: 4, openverse: 5, ai: 9 };
+export const SOURCE_RANK: Record<PictureSource, number> = { unsplash: 0, pexels: 0, pixabay: 1, stocksnap: 2, rawpixel: 3, wikimedia: 4, flickr: 5, openverse: 6, ai: 9 };
 
 export const SOURCE_LABEL: Record<PictureSource, string> = {
+  unsplash: "Real photo · Unsplash",
+  pixabay: "Real photo · Pixabay",
   pexels: "Real photo · Pexels",
   stocksnap: "Real photo · StockSnap",
   rawpixel: "Real photo · rawpixel",
@@ -138,6 +142,53 @@ export function fromPexels(json: unknown): PictureOption[] {
       credit: String(p.photographer || "").slice(0, 100),
       license: "Pexels licence",
       page: p.url || "https://www.pexels.com",
+    }));
+}
+
+type UsPhoto = {
+  id?: string; width?: number; height?: number; alt_description?: string | null; description?: string | null;
+  urls?: { regular?: string; small?: string; full?: string }; links?: { html?: string; download_location?: string };
+  user?: { name?: string; links?: { html?: string } };
+};
+
+/** Unsplash (api.unsplash.com/search/photos) answer → options. Credit = photographer on Unsplash. */
+export function fromUnsplash(json: unknown): PictureOption[] {
+  const rows = (json && typeof json === "object" && Array.isArray((json as { results?: unknown }).results) ? (json as { results: UsPhoto[] }).results : []) as UsPhoto[];
+  return rows
+    .filter((p) => p && p.urls && p.urls.regular)
+    .map((p) => ({
+      id: `us:${p.id}`,
+      source: "unsplash" as const,
+      thumb: p.urls!.small || p.urls!.regular!,
+      url: p.urls!.regular!,
+      width: p.width ?? null,
+      height: p.height ?? null,
+      title: String(p.alt_description || p.description || "").slice(0, 140),
+      credit: String(p.user?.name || "").slice(0, 100),
+      license: "Unsplash licence",
+      page: p.links?.html || "https://unsplash.com",
+      track: p.links?.download_location,
+    }));
+}
+
+type PbHit = { id?: number; pageURL?: string; type?: string; tags?: string; webformatURL?: string; largeImageURL?: string; imageWidth?: number; imageHeight?: number; user?: string };
+
+/** Pixabay (pixabay.com/api) answer → options. Photos only. */
+export function fromPixabay(json: unknown): PictureOption[] {
+  const rows = (json && typeof json === "object" && Array.isArray((json as { hits?: unknown }).hits) ? (json as { hits: PbHit[] }).hits : []) as PbHit[];
+  return rows
+    .filter((h) => h && (h.largeImageURL || h.webformatURL) && (!h.type || h.type === "photo"))
+    .map((h) => ({
+      id: `pb:${h.id}`,
+      source: "pixabay" as const,
+      thumb: h.webformatURL || h.largeImageURL!,
+      url: h.largeImageURL || h.webformatURL!,
+      width: h.imageWidth ?? null,
+      height: h.imageHeight ?? null,
+      title: String(h.tags || "").slice(0, 140),
+      credit: String(h.user || "").slice(0, 100),
+      license: "Pixabay licence",
+      page: h.pageURL || "https://pixabay.com",
     }));
 }
 

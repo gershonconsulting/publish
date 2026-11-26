@@ -6,8 +6,8 @@
  * page and picks one — it becomes the post's picture. Pure rules here (tested).
  */
 export const MAX_CHOICES = 3;
-export type Choice = { id: string; mime: string; dataB64: string; width: number | null; height: number | null; label: string; at: string };
-export type ChoiceInfo = Omit<Choice, "dataB64">;
+export type Choice = { id: string; mime: string; dataB64: string; width: number | null; height: number | null; label: string; at: string; track?: string };
+export type ChoiceInfo = Omit<Choice, "dataB64" | "track">;
 
 /** Adds a picture; refuses a 4th. */
 export function addChoice(list: Choice[], c: Choice): { list: Choice[]; error?: string } {
@@ -30,8 +30,9 @@ export function approveBlock(choices: number): string | null {
 }
 
 export function withoutData(c: Choice): ChoiceInfo {
-  const { dataB64: _d, ...rest } = c;
+  const { dataB64: _d, track: _t, ...rest } = c;
   void _d;
+  void _t;
   return rest;
 }
 
@@ -39,4 +40,9 @@ export function withoutData(c: Choice): ChoiceInfo {
 export function approveAllNote(approved: number, waitingChoice: number): string | null {
   if (!waitingChoice) return null;
   return `${approved ? `${approved} approved. ` : ""}${waitingChoice} post${waitingChoice === 1 ? "" : "s"} still need${waitingChoice === 1 ? "s" : ""} you to choose a picture.`;
+}
+
+/** Unsplash API guidelines: call download_location only when a photo is actually used. Returns the URL to call, or null. */
+export function unsplashTrackUrl(source: string, track?: string | null): string | null {
+  return source === "unsplash" && track && /^https:\/\/api\.unsplash\.com\//.test(track) ? track : null;
 }

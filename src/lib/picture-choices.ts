@@ -4,6 +4,7 @@
  */
 import prisma from "@/lib/db-raw";
 import { addEvent, MEDIA_SELECT } from "@/lib/publishing";
+import { trackUse } from "@/lib/picture-options-db";
 import { addChoice, removeChoice, withoutData, type Choice, type ChoiceInfo } from "@/lib/picture-choices-model";
 
 const key = (itemId: string) => `pic_choices:${itemId}`;
@@ -32,9 +33,9 @@ function newId(): string {
   return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-export async function addPictureChoice(orgId: string, itemId: string, p: { dataB64: string; mime: string; width?: number | null; height?: number | null; label?: string }): Promise<string | null> {
+export async function addPictureChoice(orgId: string, itemId: string, p: { dataB64: string; mime: string; width?: number | null; height?: number | null; label?: string; track?: string }): Promise<string | null> {
   const r = addChoice(await getChoices(orgId, itemId), {
-    id: newId(), mime: p.mime, dataB64: p.dataB64, width: p.width ?? null, height: p.height ?? null, label: (p.label || "").slice(0, 120), at: new Date().toISOString(),
+    id: newId(), mime: p.mime, dataB64: p.dataB64, width: p.width ?? null, height: p.height ?? null, label: (p.label || "").slice(0, 120), at: new Date().toISOString(), ...(p.track ? { track: p.track } : {}),
   });
   if (r.error) return r.error;
   await save(orgId, itemId, r.list);
@@ -87,6 +88,7 @@ export async function clientChoosePicture(orgId: string, itemId: string, choiceI
     select: MEDIA_SELECT,
   });
   await clearPictureChoices(orgId, itemId);
+  if (c.track) await trackUse({ source: "unsplash", track: c.track });
   await addEvent(orgId, itemId, item.version, "comment", "client", who, `Chose picture ${i + 1} of ${list.length}.`);
   return null;
 }

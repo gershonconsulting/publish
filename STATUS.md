@@ -1,5 +1,11 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-25 (v0.28.0 review link = sent posts only; deleted days stay empty)
+Last updated: 2026-11-26 (v0.28.1 Unsplash + Pixabay photo sources — PR #50 rebased on 0.28.0)
+
+## v0.28.1 — all free photo libraries (Olivier 2026-11-25: "What about all options unsplash pixabay etc")
+- ✅ Picture options search Unsplash, Pexels, Pixabay (each only when its key is set) + Openverse; best 3 real photos across all, AI only for empty slots
+- ✅ Unsplash download_location is called when a photo is used (Unsplash API guidelines); photographer credit kept
+- ✅ No key set → that source is skipped silently (Openverse + AI as before); tests 173/173, tsc clean, next build OK; no schema change
+- ❌ HELD: keys to add as Cloudflare Pages env (project gershon-publish, production): UNSPLASH_ACCESS_KEY, PIXABAY_API_KEY — Charles; Olivier OK on stock photos in client posts (licence/credit); PEXELS_API_KEY when Pexels reopens
 
 ## v0.28.0 — Altavia feedback (Olivier 2026-11-25)
 - ✅ Review link shows only the posts of the email (batch / post); bare link = waiting posts + their batch. No "other posts" toggle, never PUBLISHED/PARTIAL posts (lib/review-focus reviewScope, applied in /api/review/:token)

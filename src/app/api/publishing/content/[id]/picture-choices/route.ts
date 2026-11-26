@@ -49,7 +49,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       if (!found.length) return NextResponse.json({ success: false, error: "Show the 3 options first." }, { status: 400 });
       await clearPictureChoices(c.orgId, id);
       for (const f of found.slice(0, MAX_CHOICES)) {
-        await addPictureChoice(c.orgId, id, { dataB64: f.dataB64, mime: f.mime, width: f.o.width, height: f.o.height, label: SOURCE_LABEL[f.o.source] });
+        await addPictureChoice(c.orgId, id, { dataB64: f.dataB64, mime: f.mime, width: f.o.width, height: f.o.height, label: SOURCE_LABEL[f.o.source], track: f.o.source === "unsplash" ? f.o.track : undefined });
       }
       return NextResponse.json({ success: true, data: { loaded: Math.min(found.length, MAX_CHOICES) } });
     }

@@ -137,7 +137,7 @@ export type ClientAction = "comment" | "request_changes" | "approve" | "approve_
 
 export async function clientAction(
   orgId: string,
-  clientId: string,
+  clientId: string | null,
   itemId: string,
   action: ClientAction,
   name: string | null,
@@ -170,7 +170,7 @@ export async function clientAction(
   if (!item) return "Post not found.";
   const who = (name || "").trim().slice(0, 80) || "Client";
   const text = (body || "").trim();
-  const client = await prisma.client.findFirst({ where: { id: clientId }, select: { name: true } });
+  const client = clientId ? await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId }, select: { name: true } }) : null;
   const label = client?.name || "The client";
 
   if (action === "comment") {

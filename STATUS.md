@@ -1,5 +1,12 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-26 (v0.29.0 Knowledge Base content folder)
+Last updated: 2026-11-27 (v0.30.0 saved approval links — pending merge/deploy)
+
+## v0.30.0 — Approvals: named, reusable links with an exact content selection
+- Approvals in the global and client menus: Create approval link, request name, client or workspace, search and optional status filter. All posts are selectable, including old published posts; filtering keeps checked selections.
+- Each request saves immutable post IDs in `org_settings` (`approval_link:ga_<random token>`). No schema change, status mutation or email on creation. Existing automated review links retain their behavior.
+- The saved link displays exactly its selection regardless of later status/date/batch changes. Deleted posts are omitted without falling back to other content. Full previews remain readable after approval.
+- History includes name, client/workspace, creation date and selected count, with Open link and Copy link returning the original URL. Link actions and picture choices are bounded by saved IDs and workspace ownership.
+- Validation: 19 targeted approval/review/feature-status tests passed, TypeScript clean, production build passed, browser smoke test with fixture content (create, filters, copy, open, approve, reload). Pending merge/deploy and live validation.
 
 ## v0.29.0 — content folder link in the Knowledge Base (Olivier 2026-11-26: "In knowledge base, we need a link to a folder to upload content from.")
 - ✅ KB → company → "Content folder": up to 10 links (Google Drive, Dropbox, SharePoint, OneDrive, Box, any https), name + "Open folder"; first = main

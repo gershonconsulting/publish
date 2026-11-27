@@ -9,7 +9,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   const { token, itemId, choiceId } = await ctx.params;
   const r = await resolveReviewToken(token);
   if (!r) return new NextResponse("Not found", { status: 404 });
-  const item = await prisma.contentItem.findFirst({ where: { id: itemId, organizationId: r.orgId, clientId: r.clientId }, select: { id: true } });
+  if (r.approval && !r.approval.ids.includes(itemId)) return new NextResponse("Not found", { status: 404 });
+  const item = await prisma.contentItem.findFirst({ where: { id: itemId, organizationId: r.orgId, ...(r.clientId ? { clientId: r.clientId } : {}) }, select: { id: true } });
   if (!item) return new NextResponse("Not found", { status: 404 });
   const c = (await getChoices(r.orgId, itemId)).find((x) => x.id === choiceId);
   if (!c) return new NextResponse("Not found", { status: 404 });

@@ -474,7 +474,11 @@ export function reviewUrl(token: string): string {
   // v4.65.0: the client's review page lives on Publish (same database, same token).
   return `${PUBLISH_ORIGIN}/review/${token}`;
 }
-export async function resolveReviewToken(token: string): Promise<{ orgId: string; clientId: string } | null> {
+export async function resolveReviewToken(token: string): Promise<{ orgId: string; clientId: string | null; approval?: import("@/lib/approval-links-model").ApprovalRecord } | null> {
+  if (token.startsWith("ga_")) {
+    const { resolveApprovalLink } = await import("@/lib/approval-links");
+    return resolveApprovalLink(token);
+  }
   if (!/^[a-f0-9]{36}$/.test(token)) return null;
   const row = await prisma.orgSetting.findFirst({ where: { key: { startsWith: "review_token:" }, value: token } });
   if (!row?.organizationId) return null;

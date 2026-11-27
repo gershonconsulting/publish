@@ -37,6 +37,7 @@ type NavItem = {
  */
 const globalItems: NavItem[] = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/approvals", icon: BadgeCheck, label: "Approvals" },
   { href: "/published", icon: CheckCheck, label: "Published" }, // v0.14.0: what went out each day
   { href: "/publishing/calendar", icon: CalendarDays, label: "Calendar" },
   { href: "/publishing/funnel", icon: BarChart3, label: "Content funnel" },
@@ -45,6 +46,7 @@ const globalItems: NavItem[] = [
 
 const clientItems: NavItem[] = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/approvals", icon: BadgeCheck, label: "Approvals" },
   { href: "/published", icon: CheckCheck, label: "Published" }, // v0.14.0
   { href: "/publishing", icon: Send, label: "Content & review" },
   { href: "/publishing/calendar", icon: CalendarDays, label: "Calendar" },

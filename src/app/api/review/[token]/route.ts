@@ -17,6 +17,7 @@ import { clientAction, type ClientAction } from "@/lib/publishing-review";
 import { clientVisibleEvents } from "@/lib/review-thread";
 import { choicesFor } from "@/lib/picture-choices";
 import { readFocus, reviewScope } from "@/lib/review-focus";
+import { approvalScope, approvalActionIds } from "@/lib/approval-links-model";
 
 const ITEM_SELECT = {
   id: true, title: true, text: true, textX: true, platforms: true, status: true, scheduledAt: true, version: true,
@@ -35,17 +36,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
   const r = await resolveReviewToken(token);
   if (!r) return NextResponse.json({ success: false, error: "This review link is not valid any more." }, { status: 404 });
   const [client, org, waiting, history] = await Promise.all([
-    prisma.client.findFirst({ where: { id: r.clientId }, select: { name: true, logoUrl: true } }),
+    r.clientId ? prisma.client.findFirst({ where: { id: r.clientId, organizationId: r.orgId }, select: { name: true, logoUrl: true } }) : null,
     prisma.organization.findUnique({ where: { id: r.orgId }, select: { name: true } }),
     // v0.25.1: waiting posts and history are read separately — with one "take 100" ordered by
     // date, a company with a long history could lose the batch the email was about.
     prisma.contentItem.findMany({
-      where: { organizationId: r.orgId, clientId: r.clientId, status: { in: ["IN_REVIEW", "CHANGES_REQUESTED"] } },
+      where: r.approval
+        ? { organizationId: r.orgId, ...(r.clientId ? { clientId: r.clientId } : {}), id: { in: r.approval.ids } }
+        : { organizationId: r.orgId, clientId: r.clientId, status: { in: ["IN_REVIEW", "CHANGES_REQUESTED"] } },
       select: ITEM_SELECT,
       orderBy: [{ scheduledAt: "asc" }, { updatedAt: "desc" }],
-      take: 300,
+      ...(r.approval ? {} : { take: 300 }),
     }),
-    prisma.contentItem.findMany({
+    r.approval ? [] : prisma.contentItem.findMany({
       where: {
         organizationId: r.orgId,
         clientId: r.clientId,
@@ -59,7 +62,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
   ]);
   // v0.28.0: only the posts the email was about (or, on a bare link, the ones waiting) —
   // never last month's published posts.
-  const items = reviewScope([...waiting, ...history], readFocus(new URL(req.url).searchParams));
+  const items = r.approval ? approvalScope(waiting, r.approval.ids) : reviewScope([...waiting, ...history], readFocus(new URL(req.url).searchParams));
   // v0.16.2: the previous comment exchange is internal — never sent to the reviewer.
   // v0.27.0: pictures the client chooses from (waiting posts only; bytes served by …/picture/<post>/<id>).
   const choices = await choicesFor(r.orgId, waiting.map((w) => w.id));
@@ -68,7 +71,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
     comments: clientVisibleEvents(i.comments),
     pictureChoices: (choices[i.id] || []).map((c) => ({ id: c.id, width: c.width, height: c.height, url: `/api/review/${token}/picture/${i.id}/${c.id}` })),
   }));
-  return NextResponse.json({ success: true, data: { client: client?.name || "", logoUrl: client?.logoUrl || null, agency: org?.name || "", items: visible } });
+  return NextResponse.json({ success: true, data: { client: client?.name || r.approval?.scopeName || "", logoUrl: client?.logoUrl || null, agency: org?.name || "", approvalName: r.approval?.name || null, items: visible } });
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
@@ -82,7 +85,31 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
   }
   const out: { revised?: import("@/lib/publishing-revise").ReviseResult; note?: string | null } = {};
   // v0.25.1: "Approve all" on a focused link approves only the posts shown (ids).
-  const ids = Array.isArray(b?.ids) ? (b!.ids as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 300) : null;
+  const ids = Array.isArray(b?.ids) ? (b!.ids as unknown[]).filter((x): x is string => typeof x === "string").slice(0, r.approval ? 2000 : 300) : null;
+  if (r.approval) {
+    if (action !== "approve_all" && !r.approval.ids.includes(b!.contentId!)) {
+      return NextResponse.json({ success: false, error: "Post not found in this approval link." }, { status: 404 });
+    }
+    const allowed = approvalActionIds(r.approval.ids, ids);
+    const targets = await prisma.contentItem.findMany({
+      where: { organizationId: r.orgId, ...(r.clientId ? { clientId: r.clientId } : {}),
+        id: action === "approve_all" ? { in: allowed } : b!.contentId!,
+        ...(action === "approve_all" ? { status: "IN_REVIEW" } : {}) },
+      select: { id: true, clientId: true },
+    });
+    if (!targets.length) return NextResponse.json({ success: false, error: "No matching post to review." }, { status: 400 });
+    const errors: string[] = [];
+    const notes: string[] = [];
+    const groups = action === "approve_all" ? [...new Set(targets.map((t) => t.clientId))] : [targets[0].clientId];
+    for (const clientId of groups) {
+      const groupIds = targets.filter((t) => t.clientId === clientId).map((t) => t.id);
+      const err = await clientAction(r.orgId, clientId, targets[0].id, action, b?.name ?? null, b?.body ?? null, out, groupIds);
+      if (err) errors.push(err);
+      if (out.note) notes.push(out.note);
+    }
+    if (errors.length) return NextResponse.json({ success: false, error: errors.join(" ") }, { status: 400 });
+    return NextResponse.json({ success: true, revised: out.revised ?? null, note: notes.join(" ") || null });
+  }
   const err = await clientAction(r.orgId, r.clientId, b?.contentId || "", action, b?.name ?? null, b?.body ?? null, out, ids);
   if (err) return NextResponse.json({ success: false, error: err }, { status: 400 });
   return NextResponse.json({ success: true, revised: out.revised ?? null, note: out.note ?? null });

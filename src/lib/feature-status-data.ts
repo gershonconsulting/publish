@@ -24,6 +24,8 @@ export const FEATURES: Feature[] = [
     note: "LinkedIn page number + X handle still to set" },
 
   // 🟠 pending validation
+  { id: "saved-approval-links", title: "Approvals — named links with a fixed selection of posts in any status, plus reusable link history", version: "0.30.0", state: "validation", since: "2026-11-27",
+    note: "Create approval link; selected posts remain visible after status changes. History keeps the original link. Awaiting merge/deploy and live validation." },
   { id: "kb-content-folder", title: "Knowledge Base: link to the client's content folder (Drive, Dropbox, SharePoint…) to load content from", version: "0.29.0", state: "validation", since: "2026-11-26",
     note: "Knowledge Base → company → Content folder; \"Open content folder\" on every section" },
   { id: "client-picture-choice", title: "Client chooses the picture — team loads up to 3, client picks one on the review link", version: "0.27.0", state: "validation", since: "2026-11-25",

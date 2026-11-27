@@ -20,7 +20,7 @@ type Item = {
   /** v0.27.0: pictures the client chooses from (one becomes the post's picture). */
   pictureChoices?: { id: string; width: number | null; height: number | null; url: string }[];
 };
-type Data = { client: string; logoUrl: string | null; agency: string; items: Item[] };
+type Data = { client: string; logoUrl: string | null; agency: string; approvalName?: string | null; items: Item[] };
 
 const NAME_KEY = "review_name";
 
@@ -80,7 +80,7 @@ export function ReviewClient({ token, focusBatch = null, focusPost = null }: { t
   const waitingIds = approvableIds(shown);
   const groups = new Map<string, Item[]>();
   for (const i of shown) {
-    const k = batchOf(i, data.client);
+    const k = data.approvalName || batchOf(i, data.client);
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k)!.push(i);
   }
@@ -95,7 +95,7 @@ export function ReviewClient({ token, focusBatch = null, focusPost = null }: { t
           {data.logoUrl && <img src={data.logoUrl} alt="" className="w-10 h-10 rounded-md object-contain bg-white border border-gray-100" />}
           <div className="flex-1">
             <div className="text-xs text-gray-500">{data.agency} · content review</div>
-            <h1 className="text-2xl font-bold text-gray-900">Content to approve</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{data.approvalName || "Content to approve"}</h1>
           </div>
           <label className="text-xs text-gray-600">
             Your name
@@ -125,7 +125,7 @@ export function ReviewClient({ token, focusBatch = null, focusPost = null }: { t
             </div>
             <div className="space-y-4">
               {list.map((i) => (
-                <Post key={i.id} i={i} token={token} name={name} onDone={load} actionable={i.status === "IN_REVIEW"} compact={!["IN_REVIEW", "CHANGES_REQUESTED"].includes(i.status)} />
+                <Post key={i.id} i={i} token={token} name={name} onDone={load} actionable={i.status === "IN_REVIEW"} compact={!data.approvalName && !["IN_REVIEW", "CHANGES_REQUESTED"].includes(i.status)} />
               ))}
             </div>
           </section>

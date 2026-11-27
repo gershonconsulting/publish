@@ -29,6 +29,7 @@ export async function GET() {
         hasCompetitive: !!kb.competitive.notes.trim(),
         hasStyle: !!kb.style.text.trim(),
         hasBrand: hasBrand(kb.brand),
+        folders: kb.folders.length,
         icps: kb.icps.map((i) => ({ id: i.id, name: i.name })),
       });
     }

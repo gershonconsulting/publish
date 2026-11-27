@@ -1,5 +1,11 @@
 # Publish (publish.gershon.ai) — status
-Last updated: 2026-11-26 (v0.28.1 Unsplash + Pixabay photo sources — PR #50 rebased on 0.28.0)
+Last updated: 2026-11-26 (v0.29.0 Knowledge Base content folder)
+
+## v0.29.0 — content folder link in the Knowledge Base (Olivier 2026-11-26: "In knowledge base, we need a link to a folder to upload content from.")
+- ✅ KB → company → "Content folder": up to 10 links (Google Drive, Dropbox, SharePoint, OneDrive, Box, any https), name + "Open folder"; first = main
+- ✅ "Open content folder" button next to the title on every KB section of that company; menu shows the count, amber dot when empty
+- ✅ Stored in kb:<clientId> JSON (folders[]) — no schema change; invalid links refused (lib/kb-folders.ts, 3 tests)
+- ❌ Add each client's folder link (team, from what the client shared)
 
 ## v0.28.1 — all free photo libraries (Olivier 2026-11-25: "What about all options unsplash pixabay etc")
 - ✅ Picture options search Unsplash, Pexels, Pixabay (each only when its key is set) + Openverse; best 3 real photos across all, AI only for empty slots

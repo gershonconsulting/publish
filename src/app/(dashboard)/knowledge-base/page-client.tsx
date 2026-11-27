@@ -21,13 +21,18 @@
  * company's website ("Read from website") or from what the client shared
  * (upload / paste — it wins over the website). Autopilot's posts and pictures
  * follow it; it is part of the validation.
+ *
+ * v0.29.0 — "Content folder": links to the client's shared folders (Google
+ * Drive, Dropbox, SharePoint…) where its material lives, so the team opens
+ * them from here to load content into Publish. Shown as a quick
+ * "Open content folder" button on every section of the company.
  */
 
 import { useSelectedClient } from "@/lib/selected-client";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/layout/header";
-import { BadgeCheck, Building2, Palette, ChevronDown, ChevronRight, ClipboardPaste, Copy, FileUp, History, Loader2, Plus, RefreshCw, Save, Sparkles, Swords, Target, Trash2, Wand2 } from "lucide-react";
+import { BadgeCheck, Building2, ExternalLink, FolderOpen, Palette, ChevronDown, ChevronRight, ClipboardPaste, Copy, FileUp, History, Loader2, Plus, RefreshCw, Save, Sparkles, Swords, Target, Trash2, Wand2 } from "lucide-react";
 
 type Source = "ai" | "manual";
 type Icp = { id: string; name: string; description: string; source: Source; updatedAt: string; from?: string };
@@ -37,7 +42,9 @@ type KB = {
   icps: Icp[];
   style: { text: string; source: Source; updatedAt: string | null; takeover: string | null };
   brand: Brand;
+  folders: ContentFolder[];
 };
+type ContentFolder = { id: string; label: string; url: string; addedAt: string };
 type BrandColor = { name: string; hex: string; role: string };
 type Brand = { colors: BrandColor[]; fonts: string; logoUrl: string; notes: string; source: Source; from: string | null; updatedAt: string | null };
 type Stats = {
@@ -64,9 +71,9 @@ type Snapshot = {
   linkedVia: string;
   windowDays: number;
 } | null;
-type Company = { id: string; name: string; clientType: string; hasValueProp: boolean; hasCompetitive: boolean; hasStyle?: boolean; hasBrand?: boolean; icps: { id: string; name: string }[] };
-type View = "valueProp" | "competitive" | "icps" | "style" | "brand" | "validation";
-const VIEW_TITLE: Record<View, string> = { valueProp: "Value Prop", competitive: "Competitive Landscape", icps: "ICPs", style: "House Style (before Gershon)", brand: "Brand identity", validation: "Validation" };
+type Company = { id: string; name: string; clientType: string; hasValueProp: boolean; hasCompetitive: boolean; hasStyle?: boolean; hasBrand?: boolean; folders?: number; icps: { id: string; name: string }[] };
+type View = "valueProp" | "competitive" | "icps" | "style" | "brand" | "folders" | "validation";
+const VIEW_TITLE: Record<View, string> = { valueProp: "Value Prop", competitive: "Competitive Landscape", icps: "ICPs", style: "House Style (before Gershon)", brand: "Brand identity", folders: "Content folder", validation: "Validation" };
 
 function AiTag({ s }: { s: Source }) {
   return s === "ai" ? <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200">AI draft</span> : null;
@@ -220,6 +227,7 @@ export function KnowledgeBaseClient() {
                       ["icps", Target, `ICPs (${c.icps.length})`, c.icps.length > 0],
                       ["style", History, "House Style", !!c.hasStyle],
                       ["brand", Palette, "Brand", !!c.hasBrand],
+                      ["folders", FolderOpen, `Content folder${c.folders ? ` (${c.folders})` : ""}`, !!c.folders],
                       ["validation", BadgeCheck, "Validation", true],
                     ] as const).map(([v, Icon, label, filled]) => (
                       <button key={v} onClick={() => setView(v)} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm ${view === v ? "bg-gray-900 text-white" : "text-gray-700 hover:bg-gray-50"}`}>
@@ -255,7 +263,19 @@ export function KnowledgeBaseClient() {
                 {view === "competitive" && <AiTag s={kb.competitive.source} />}
                 {view === "style" && <AiTag s={kb.style.source} />}
                 {view === "brand" && <AiTag s={kb.brand.source} />}
-                {canWrite && view !== "validation" && (
+                {view !== "folders" && (kb.folders || [])[0] && (
+                  <a href={kb.folders[0].url} target="_blank" rel="noopener noreferrer" title={kb.folders[0].url} className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <FolderOpen size={13} /> Open content folder <ExternalLink size={11} />
+                  </a>
+                )}
+                {canWrite && view === "folders" && (
+                  <div className="ml-auto flex gap-2">
+                    <button disabled={!!busy || !dirty} onClick={save} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg disabled:opacity-40">
+                      {busy === "save" ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
+                    </button>
+                  </div>
+                )}
+                {canWrite && view !== "validation" && view !== "folders" && (
                   <div className="ml-auto flex gap-2">
                     <button disabled={!!busy} onClick={() => draft(view)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-lg disabled:opacity-50">
                       {busy === "draft:" + view ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} {view === "brand" ? "Read from website" : "Draft with Intelligence"}
@@ -345,6 +365,10 @@ export function KnowledgeBaseClient() {
                   onChange={(b) => edit((k) => ({ ...k, brand: b }))}
                   upload={canWrite ? <BrandUpload clientId={open} dirty={dirty} onDone={(k, from) => { setKb(k); setDirty(false); setMsg(`Brand read from “${from}”. Check it and save any correction.`); void loadList(); }} /> : null}
                 />
+              )}
+
+              {view === "folders" && (
+                <FoldersView folders={kb.folders || []} canWrite={canWrite} onChange={(f) => edit((k) => ({ ...k, folders: f }))} />
               )}
 
               {view === "validation" && <ValidationView clientId={open} company={current.name} canWrite={canWrite} dirty={dirty} />}
@@ -808,6 +832,58 @@ function ValidationView({ clientId, company, canWrite, dirty }: { clientId: stri
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/** v0.29.0 — the client's shared folders where the content to load into Publish lives. */
+const isLink = (u: string) => { let s = u.trim(); if (!s) return false; if (!/^[a-z]+:\/\//i.test(s)) s = "https://" + s; try { const x = new URL(s); return (x.protocol === "https:" || x.protocol === "http:") && x.hostname.includes("."); } catch { return false; } };
+const hrefOf = (u: string) => (/^[a-z]+:\/\//i.test(u.trim()) ? u.trim() : "https://" + u.trim());
+function providerOf(u: string): string {
+  let h = ""; try { h = new URL(hrefOf(u)).hostname.toLowerCase(); } catch { return "Link"; }
+  if (/google\.com$/.test(h)) return "Google Drive";
+  if (/dropbox\.com$/.test(h)) return "Dropbox";
+  if (/sharepoint\.com$/.test(h)) return "SharePoint";
+  if (/onedrive\.live\.com$|1drv\.ms$/.test(h)) return "OneDrive";
+  if (/box\.com$/.test(h)) return "Box";
+  return h.replace(/^www\./, "");
+}
+function FoldersView({ folders, canWrite, onChange }: { folders: ContentFolder[]; canWrite: boolean; onChange: (f: ContentFolder[]) => void }) {
+  const set = (i: number, patch: Partial<ContentFolder>) => onChange(folders.map((f, k) => (k === i ? { ...f, ...patch } : f)));
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-gray-500">
+        The link to the client&apos;s shared folder (Google Drive, Dropbox, SharePoint, OneDrive, Box…) where its material lives — brand book, photos, product sheets, past posts. Open it from here to pick what to load into Publish. The first folder is the main one: it shows as “Open content folder” on every section of this company.
+      </p>
+      {!folders.length && <p className="text-sm text-amber-700">No content folder yet{canWrite ? " — add the link the client shared." : "."}</p>}
+      {folders.map((f, i) => {
+        const ok = isLink(f.url);
+        return (
+          <div key={f.id || i} className="rounded-lg border border-gray-200 p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <FolderOpen size={15} className="text-gray-500 shrink-0" />
+              <input value={f.label} readOnly={!canWrite} onChange={(e) => set(i, { label: e.target.value })} placeholder="Name, e.g. Brand book & photos" className="flex-1 font-medium text-sm border-b border-transparent focus:border-gray-300 outline-none" />
+              {i === 0 && <span className="text-[10px] uppercase tracking-wide text-gray-500 border border-gray-200 rounded px-1.5 py-0.5">main</span>}
+              {ok && <span className="text-[11px] text-gray-500">{providerOf(f.url)}</span>}
+              {canWrite && <button onClick={() => onChange(folders.filter((_, k) => k !== i))} className="text-gray-400 hover:text-red-600" title="Remove"><Trash2 size={14} /></button>}
+            </div>
+            <div className="flex items-center gap-2">
+              <input value={f.url} readOnly={!canWrite} onChange={(e) => set(i, { url: e.target.value })} placeholder="https://drive.google.com/drive/folders/…" className={`flex-1 border rounded px-2 py-1.5 text-sm ${f.url.trim() && !ok ? "border-red-400" : "border-gray-300"}`} />
+              {ok && (
+                <a href={hrefOf(f.url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg">
+                  <ExternalLink size={14} /> Open folder
+                </a>
+              )}
+            </div>
+            {f.url.trim() && !ok && <p className="text-xs text-red-700">This is not a link — it will not be saved.</p>}
+          </div>
+        );
+      })}
+      {canWrite && folders.length < 10 && (
+        <button onClick={() => onChange([...folders, { id: "", label: "", url: "", addedAt: "" }])} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg">
+          <Plus size={14} /> Add a folder link
+        </button>
+      )}
     </div>
   );
 }
